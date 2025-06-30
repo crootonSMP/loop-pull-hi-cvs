@@ -120,18 +120,30 @@ def download_cv_from_api(cv_id: str, token: str) -> Optional[Dict[str, any]]:
     url = f"https://partnersapi.applygateway.com/api/Candidates/getcv/{cv_id}"
     headers = {
         "Authorization": f"Bearer {token}",
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept": "*/*",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Origin": "https://clients.hireintelligence.io",
+        "Referer": "https://clients.hireintelligence.io/",
+        "Connection": "keep-alive"
     }
+
     try:
         r = requests.get(url, headers=headers, timeout=30)
         r.raise_for_status()
         content_type = r.headers.get("Content-Type", "application/pdf")
         extension = CONTENT_TYPE_TO_EXTENSION.get(content_type, ".pdf")
-        return {"data": r.content, "content_type": content_type, "extension": extension}
+        return {
+            "data": r.content,
+            "content_type": content_type,
+            "extension": extension
+        }
+    except requests.HTTPError as http_err:
+        logger.error(f"HTTP error downloading CV {cv_id}: {http_err} – Response: {r.text}")
     except Exception as e:
         logger.error(f"Failed to download CV for cVid {cv_id}: {e}")
-        return None
+    return None
+
 
 # --- Main Logic ---
 def main():
