@@ -114,13 +114,13 @@ def load_config() -> Dict[str, str]:
     cfg["DB_CONNECTION_NAME"] = os.getenv("DB_CONNECTION_NAME", "").strip()
     logger.info(f"Loaded DB_CONNECTION_NAME from environment variable: '{cfg['DB_CONNECTION_NAME']}'")
 
-    # New: Load DATES variable for date range of candidates to process
+    # Load DATES variable, but it's now optional and defaults to yesterday if not provided or invalid
     cfg["DATES"] = os.getenv("DATES", "").strip()
-    logger.info(f"Loaded DATES from environment variable: '{cfg['DATES']}'")
+    logger.info(f"Loaded DATES from environment variable: '{cfg['DATES']}' (Optional, defaults to yesterday)")
 
     if not all([cfg["HIRE_USERNAME"], cfg["HIRE_PASSWORD"], cfg["DB_USER"], 
-                cfg["DB_PASS"], cfg["DB_NAME"], cfg["DB_CONNECTION_NAME"], cfg["DATES"]]):
-        missing_keys = [k for k, v in cfg.items() if not v]
+                cfg["DB_PASS"], cfg["DB_NAME"], cfg["DB_CONNECTION_NAME"]]): # DATES is no longer mandatory for this check
+        missing_keys = [k for k, v in cfg.items() if not v and k != "DATES"] # Exclude DATES from mandatory check
         logger.error(f"Missing required configuration values. Check environment variables and Secret Manager. Missing: {missing_keys}")
         raise ValueError("Missing required configuration values for ETL job.")
         
@@ -193,34 +193,8 @@ def get_api_auth_token(cfg: Dict[str, str]) -> Optional[str]:
         if e.response is not None:
             logger.error(f"Error Response Body: {e.response.text}")
         return None
-
-def download_cv_from_api(cv_id: int, token: str) -> Optional[Dict]:
-    """Downloads a single CV from the API."""
-    cv_url = f"https://partnersapi.applygateway.com/api/Candidate/DownloadCV?cvid={cv_id}"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-        "Accept": "*/*", # Accept all content types for CVs
-    }
-
-    try:
-        logger.info(f"Attempting to download CV for cVid: {cv_id}")
-        response = requests.get(cv_url, headers=headers, timeout=60) # Increased timeout for large CVs
-        response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
-
-        content_type = response.headers.get("Content-Type", "application/octet-stream").split(';')[0]
-        file_extension = CONTENT_TYPE_TO_EXTENSION.get(content_type, ".bin") # Default to .bin if unknown
-        
-        logger.info(f"Successfully downloaded CV for cVid {cv_id}. Content-Type: {content_type}, Extension: {file_extension}")
-        return {"data": response.content, "content_type": content_type, "extension": file_extension}
-    except requests.exceptions.RequestException as e:
-        status_code = e.response.status_code if e.response is not None else 'N/A'
-        logger.warning(f"Failed to download CV for cVid {cv_id}. Status: {status_code}. Error: {e}")
-        if e.response is not None:
-            logger.warning(f"CV Download Error Response Body: {e.response.text[:200]}...") # Log partial body
-        return None
     except Exception as e:
-        logger.error(f"Unexpected error during CV download for cVid {cv_id}: {e}", exc_info=True)
+        logger.critical(f"Unhandled error during API authentication for CV download: {e}", exc_info=True)
         return None
 
 # --- Main Logic for CV Pulling ---
@@ -235,11 +209,11 @@ def main():
             logger.error("❌ Failed to get API authentication token. Cannot download CVs. Exiting.")
             sys.exit(1)
 
-        # --- Dynamic Date Range based on DATES variable ---
-        dates_var = cfg.get("DATES")
+        # --- Determine Date Range for Querying Candidates ---
         start_date_obj = None
         end_date_obj = None
-
+        
+        dates_var = cfg.get("DATES")
         if dates_var and dates_var.startswith("Week") and len(dates_var) > 4:
             try:
                 week_num = int(dates_var[4:-4])
@@ -253,15 +227,20 @@ def main():
                 logger.info(f"Processing CVs for Week {week_num} of {year}: {start_date_obj.strftime('%Y-%m-%d')} to {end_date_obj.strftime('%Y-%m-%d')}")
 
             except ValueError as ve:
-                logger.error(f"Invalid DATES format '{dates_var}'. Expected 'WeekXYear' (e.g., 'Week12024'). Exiting. Error: {ve}")
-                sys.exit(1)
+                logger.error(f"Invalid DATES format '{dates_var}'. Expected 'WeekXYear' (e.g., 'Week12024'). Falling back to yesterday. Error: {ve}")
+                start_date_obj = datetime.now(timezone.utc) - timedelta(days=1)
+                end_date_obj = datetime.now(timezone.utc).replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.utc)
         else:
-            logger.error(f"DATES variable '{dates_var}' not in 'WeekXYear' format or not provided. Exiting.")
-            sys.exit(1)
+            logger.info(f"DATES variable '{dates_var}' not in 'WeekXYear' format or not provided. Defaulting to yesterday's data.")
+            start_date_obj = datetime.now(timezone.utc) - timedelta(days=1)
+            end_date_obj = datetime.now(timezone.utc).replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.utc)
         
+        # Ensure start_date_obj is at the beginning of the day for filtering
+        start_date_obj = start_date_obj.replace(hour=0, minute=0, second=0, microsecond=0)
+
         # --- Query Candidates for CV Download ---
         # Select candidates who have a cVid but no cv_gcs_path or a failed download status
-        # We also filter by created_on date range
+        # Filter by created_on date range
         query_sql = text(f"""
             SELECT
                 id, email, job_ref_number, created_on, cv_id, first_name, last_name
@@ -284,7 +263,7 @@ def main():
                 })
                 for row in result:
                     candidates_to_process.append(row._asdict()) # Convert Row to dictionary
-            logger.info(f"Found {len(candidates_to_process)} candidates with CVs to process for the period.")
+            logger.info(f"Found {len(candidates_to_process)} candidates with CVs to process for the period ({start_date_obj.strftime('%Y-%m-%d')} to {end_date_obj.strftime('%Y-%m-%d')}).")
         except Exception as e:
             logger.error(f"❌ Failed to query candidates from database: {e}", exc_info=True)
             sys.exit(1)
