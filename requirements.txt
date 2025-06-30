@@ -7,12 +7,12 @@ google-auth==2.29.0
 
 # Data Manipulation
 pandas==2.2.2
-openpyxl==3.1.2
+openpyxl==3.1.2 # Required for writing .xlsx files with pandas
 
 # HTTP Requests
 requests==2.32.3
 
 # Database dependencies for Cloud SQL integration
 sqlalchemy==2.0.30
-cloud-sql-python-connector[pg8000]
-
+cloud-sql-python-connector[pg8000] # ✅ CORRECT: Single entry for connector with pg8000 driver
+# Removed redundant 'google-cloud-sql-connector' and separate 'pg8000'
