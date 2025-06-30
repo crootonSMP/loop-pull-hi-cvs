@@ -14,5 +14,5 @@ requests==2.32.3
 
 # Database dependencies for Cloud SQL integration
 sqlalchemy==2.0.30
-google-cloud-sql-connector==1.13.0 # ✅ FIXED: Pinning specific version
-pg8000==1.30.0 # ✅ FIXED: Explicitly listing pg8000 separately
+google-cloud-sql-connector # ✅ FIXED: Removed specific version pin
+pg8000==1.30.0 # Explicitly listing pg8000 separately
