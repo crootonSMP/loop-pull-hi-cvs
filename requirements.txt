@@ -7,12 +7,12 @@ google-auth==2.29.0
 
 # Data Manipulation
 pandas==2.2.2
-openpyxl==3.1.2 # Required for writing .xlsx files with pandas
+openpyxl==3.1.2
 
 # HTTP Requests
 requests==2.32.3
 
 # Database dependencies for Cloud SQL integration
 sqlalchemy==2.0.30
-google-cloud-sql-connector # ✅ FIXED: Removed specific version pin
-pg8000==1.30.0 # Explicitly listing pg8000 separately
+cloud-sql-python-connector[pg8000]
+
