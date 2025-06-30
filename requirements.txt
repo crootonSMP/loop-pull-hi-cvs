@@ -4,14 +4,15 @@
 google-cloud-storage==2.16.0
 google-cloud-secret-manager==2.19.0
 google-auth==2.29.0
-google-cloud-sql-connector[pg8000] # For Cloud SQL connection
 
 # Data Manipulation
-pandas==2.2.2 # Used for DataFrame for querying results from DB
+pandas==2.2.2
+openpyxl==3.1.2 # Required for writing .xlsx files with pandas
 
 # HTTP Requests
 requests==2.32.3
 
-# Database dependencies
+# Database dependencies for Cloud SQL integration
 sqlalchemy==2.0.30
-pg8000 # Driver for PostgreSQL
+google-cloud-sql-connector==1.13.0 # ✅ FIXED: Pinning specific version
+pg8000==1.30.0 # ✅ FIXED: Explicitly listing pg8000 separately
