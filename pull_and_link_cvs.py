@@ -117,32 +117,46 @@ def get_api_auth_token(cfg: Dict[str, str]) -> Optional[str]:
 
 # --- CV Download ---
 def download_cv_from_api(cv_id: str, token: str) -> Optional[Dict[str, any]]:
-    url = f"https://partnersapi.applygateway.com/api/Candidates/getcv/{cv_id}"
+    initial_url = f"https://partnersapi.applygateway.com/api/Candidates/getcv/{cv_id}"
     headers = {
         "Authorization": f"Bearer {token}",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Accept": "*/*",
-        "Accept-Encoding": "gzip, deflate, br",
+        "Accept": "application/json",
         "Origin": "https://clients.hireintelligence.io",
         "Referer": "https://clients.hireintelligence.io/",
-        "Connection": "keep-alive"
     }
 
     try:
-        r = requests.get(url, headers=headers, timeout=30)
-        r.raise_for_status()
-        content_type = r.headers.get("Content-Type", "application/pdf")
+        # Step 1: Call API to get redirect or signed URL
+        r = requests.get(initial_url, headers=headers, timeout=30, allow_redirects=False)
+        
+        if r.status_code == 302:
+            signed_url = r.headers.get("Location")
+        elif r.status_code == 200 and "application/json" in r.headers.get("Content-Type", ""):
+            signed_url = r.json().get("data", {}).get("cvUrl")  # Guessing the JSON key
+        else:
+            logger.error(f"Unexpected response for CV {cv_id}: {r.status_code}, body={r.text}")
+            return None
+
+        if not signed_url:
+            logger.error(f"No signed URL found for CV {cv_id}")
+            return None
+
+        # Step 2: Download actual file from signed URL
+        file_resp = requests.get(signed_url, headers={"User-Agent": headers["User-Agent"]}, timeout=30)
+        file_resp.raise_for_status()
+        content_type = file_resp.headers.get("Content-Type", "application/pdf")
         extension = CONTENT_TYPE_TO_EXTENSION.get(content_type, ".pdf")
         return {
-            "data": r.content,
+            "data": file_resp.content,
             "content_type": content_type,
             "extension": extension
         }
-    except requests.HTTPError as http_err:
-        logger.error(f"HTTP error downloading CV {cv_id}: {http_err} – Response: {r.text}")
+
     except Exception as e:
-        logger.error(f"Failed to download CV for cVid {cv_id}: {e}")
-    return None
+        logger.error(f"Failed to fetch CV {cv_id}: {e}")
+        return None
+
 
 
 # --- Main Logic ---
