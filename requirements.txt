@@ -1,0 +1,17 @@
+# Python Dependencies for pull_and_link_cvs.py
+
+# Google Cloud Client Libraries
+google-cloud-storage==2.16.0
+google-cloud-secret-manager==2.19.0
+google-auth==2.29.0
+google-cloud-sql-connector[pg8000] # For Cloud SQL connection
+
+# Data Manipulation
+pandas==2.2.2 # Used for DataFrame for querying results from DB
+
+# HTTP Requests
+requests==2.32.3
+
+# Database dependencies
+sqlalchemy==2.0.30
+pg8000 # Driver for PostgreSQL
