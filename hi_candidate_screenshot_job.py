@@ -33,14 +33,10 @@ def test_gcs_upload():
         blob = bucket.blob(test_blob_name)
         blob.upload_from_string(test_content)
         print(f"[DEBUG] Successfully uploaded GCS test file: gs://{BUCKET_NAME}/{test_blob_name}")
-        sys.stdout.flush()
-        sys.stderr.flush()
         return True
     except Exception as e:
         print(f"[ERROR] Failed to upload GCS test file: {e}")
-        sys.stdout.flush()
         traceback.print_exc()
-        sys.stderr.flush()
         return False
 
 def init_driver():
@@ -73,9 +69,6 @@ def init_driver():
     chrome_options.add_argument(f'--user-data-dir={temp_user_data_dir}')
 
     print("[DEBUG] Initializing headless Chrome WebDriver...")
-    sys.stdout.flush()
-    sys.stderr.flush()
-
     service = Service(log_path="/tmp/chromedriver_debug.log", verbose=True)
     return webdriver.Chrome(service=service, options=chrome_options)
 
@@ -83,44 +76,44 @@ def take_debug_screenshot(driver, name):
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"screenshot_{name}_{timestamp}.png"
-        print(f"[DEBUG] Attempting to save screenshot to: {os.path.join(os.getcwd(), filename)}")
-        sys.stdout.flush()
+        print(f"[DEBUG] Attempting to save screenshot: {filename}")
         success = driver.save_screenshot(filename)
         if success:
-            print(f"Saved screenshot: {filename}")
+            print(f"[INFO] Screenshot saved: {filename}")
             return filename
         else:
             print(f"[ERROR] driver.save_screenshot() returned False for {filename}")
             return None
     except Exception as e:
-        print(f"[ERROR] Failed to take screenshot: {e}")
+        print(f"[ERROR] Exception in take_debug_screenshot: {e}")
         traceback.print_exc()
         return None
 
 def upload_to_gcs(filename):
+    if not filename:
+        print("[ERROR] No filename passed to upload_to_gcs() — skipping upload.")
+        return
     if not os.path.exists(filename):
-        print(f"[ERROR] File does not exist locally: {filename}. Cannot upload to GCS.")
+        print(f"[ERROR] File not found: {filename}")
         return
     try:
         bucket = storage_client.bucket(BUCKET_NAME)
         blob = bucket.blob(f"debug/{filename}")
-        print(f"[DEBUG] Uploading {filename} to gs://{BUCKET_NAME}/debug/{filename}")
+        print(f"[DEBUG] Uploading {filename} to GCS...")
         blob.upload_from_filename(filename)
-        print(f"Uploaded {filename}")
+        print(f"[INFO] Uploaded to gs://{BUCKET_NAME}/debug/{filename}")
     except Exception as e:
-        print(f"[ERROR] GCS upload failed for {filename}: {e}")
+        print(f"[ERROR] GCS upload failed: {e}")
         traceback.print_exc()
     finally:
         try:
-            if os.path.exists(filename):
-                os.remove(filename)
-                print(f"Deleted local screenshot: {filename}")
+            os.remove(filename)
+            print(f"[INFO] Deleted local screenshot: {filename}")
         except Exception as e:
-            print(f"Failed to delete local file {filename}: {e}")
+            print(f"[WARN] Could not delete local file: {e}")
 
 def login_and_capture():
     print(f"[DEBUG] Starting screenshot job. GCS Bucket: {BUCKET_NAME}")
-    sys.stdout.flush()
 
     if not test_gcs_upload():
         print("[ERROR] GCS test failed. Exiting.")
@@ -129,7 +122,7 @@ def login_and_capture():
     username = os.environ.get("HIRE_USERNAME")
     password = os.environ.get("HIRE_PASSWORD")
     if not username or not password:
-        print("[ERROR] Missing HIRE_USERNAME or HIRE_PASSWORD environment variables.")
+        print("[ERROR] Missing HIRE_USERNAME or HIRE_PASSWORD env vars.")
         sys.exit(1)
 
     driver = None
@@ -145,25 +138,20 @@ def login_and_capture():
         wait.until(EC.presence_of_element_located((By.ID, "password"))).send_keys(password)
         wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Sign In')]"))).click()
 
-        print("[DEBUG] Submitted login form.")
+        print("[DEBUG] Login submitted.")
         wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(),'Jobs Listed')]")))
         upload_to_gcs(take_debug_screenshot(driver, "dashboard_loaded"))
 
         print("[DEBUG] Navigating to Multi-Candidate View...")
-        wait.until(EC.element_to_be_clickable((
-            By.XPATH, "//button[contains(text(),'Multi-Candidate View')]"))).click()
+        wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Multi-Candidate View')]"))).click()
 
         wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(),'Candidate Tracker')]")))
         upload_to_gcs(take_debug_screenshot(driver, "multi_candidate_view"))
 
-        # Optional final screenshot
+        # Optional final state screenshot
         upload_to_gcs(take_debug_screenshot(driver, "final_state"))
 
-        # Optional: log browser console output
-        # for entry in driver.get_log('browser'):
-        #     print(f"[BROWSER LOG] {entry}")
-
-        print("[SUCCESS] Script completed all steps successfully.")
+        print("[SUCCESS] Script completed successfully.")
     except TimeoutException as e:
         print("[ERROR] TimeoutException:", e)
         traceback.print_exc()
@@ -177,7 +165,7 @@ def login_and_capture():
             print("[DEBUG] Closing browser.")
             driver.quit()
         else:
-            print("[DEBUG] Driver was not initialized.")
+            print("[WARN] WebDriver not initialized — skipping quit.")
 
 if __name__ == "__main__":
     login_and_capture()
