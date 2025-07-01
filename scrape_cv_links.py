@@ -20,8 +20,9 @@ UPLOAD_PREFIX = "cvs/raw/"
 
 # --- Secret Manager ---
 def get_secret(secret_id):
+    import google.auth
     client = secretmanager.SecretManagerServiceClient()
-    project_id = os.environ["GCP_PROJECT"]
+    _, project_id = google.auth.default()
     name = f"projects/{project_id}/secrets/{secret_id}/versions/latest"
     return client.access_secret_version(request={"name": name}).payload.data.decode("UTF-8")
 
