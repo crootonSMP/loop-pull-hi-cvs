@@ -10,8 +10,8 @@ ENV TZ=Europe/London
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11 \
     python3-pip \
-    python3.11-venv \ # <--- ADD THIS LINE
-    build-essential \
+    python3.11-venv \
+    build-essential \ # This is a package name, not a command. It should be fine.
     curl \
     unzip \
     wget \
