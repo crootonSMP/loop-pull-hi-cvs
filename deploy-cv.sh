@@ -3,7 +3,7 @@
 set -e  # Exit on error
 
 # Define common variables
-JOB_TAG="v01-13"
+JOB_TAG="v03-03" # Update your JOB_TAG if you retry the deploy
 JOB_NAME="daily-hire-screenshot-job-${JOB_TAG}"
 IMAGE_NAME="europe-west2-docker.pkg.dev/intelligent-recruitment-engine/recruitment-engine-repo/${JOB_NAME}:${JOB_TAG}"
 REGION="europe-west2"
@@ -42,9 +42,10 @@ gcloud run jobs deploy "${JOB_NAME}" \
   --cpu="${CPU}" \
   --image="${IMAGE_NAME}" \
   --task-timeout="${TASK_TIMEOUT}" \
-  --set-env-vars="DB_CONNECTION_NAME=${DB_CONNECTION_INSTANCE},HIRE_USERNAME=crootonmaster@applygateway.com,DEBUG_SCREENSHOT_BUCKET=recruitment-engine-cvs-sp-260625" \
+  --set-env-vars="DB_CONNECTION_NAME=${DB_CONNECTION_INSTANCE},HIRE_USERNAME=crootonmaster@applygateway.com,DEBUG_SCREENSHOT_BUCKET=recruitment-engine-cvs-sp-260625,SE_SHM_SIZE=2G" \ # <-- FIX: ADDED SE_SHM_SIZE HERE
   --set-secrets="HIRE_PASSWORD=hire-password:latest,DB_USER=db-user:latest,DB_PASSWORD=db-password:latest,DB_NAME=db-name:latest" \
   --set-cloudsql-instances="${DB_CONNECTION_INSTANCE}" \
+  --service-account="screenshot-runner@intelligent-recruitment-engine.iam.gserviceaccount.com" \
   || exit 1
 
 echo "✅ Job '${JOB_NAME}' deployed."
