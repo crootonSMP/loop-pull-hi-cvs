@@ -1,83 +1,40 @@
-import os
-import sys
-import time
-import tempfile
-import logging
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from google.cloud import storage
+import time
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+# Setup
+options = Options()
+options.add_argument("--headless")
+options.add_argument("--no-sandbox")
+driver = webdriver.Chrome(options=options)
+wait = WebDriverWait(driver, 30)
 
-def upload_to_gcs(local_path, blob_name):
-    try:
-        client = storage.Client()
-        bucket = client.bucket("recruitment-engine-cvs-sp-260625")
-        blob = bucket.blob(blob_name)
-        blob.upload_from_filename(local_path)
-        logging.info(f"📤 Uploaded screenshot to gs://recruitment-engine-cvs-sp-260625/{blob_name}")
-    except Exception as e:
-        logging.error(f"❌ Failed to upload screenshot to GCS: {e}")
+# Step 1 – Login
+driver.get("https://clients.hireintelligence.io/")
+wait.until(EC.presence_of_element_located((By.NAME, "email"))).send_keys("crootonmaster@applygateway.com")
+driver.find_element(By.NAME, "password").send_keys("YOUR_PASSWORD")  # Update securely
+driver.find_element(By.XPATH, "//button[text()='Log In']").click()
 
-def capture(driver, name):
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-        driver.save_screenshot(tmp.name)
-        upload_to_gcs(tmp.name, f"debug/{name}.png")
-        os.remove(tmp.name)
+# Step 2 – Wait for "Jobs Listed" text
+wait.until(EC.text_to_be_present_in_element(
+    (By.XPATH, "//div[contains(text(), 'Jobs Listed')]"),
+    "Jobs Listed"
+))
 
-def run():
-    EMAIL = os.getenv("HIRE_USERNAME")
-    PASSWORD = os.getenv("HIRE_PASSWORD")
+# Step 3 – Go to Multi-Candidate Admin page
+driver.execute_script("window.location.href='https://clients.hireintelligence.io/multi-candidate-admin'")
 
-    if not EMAIL or not PASSWORD:
-        logging.error("Missing login credentials.")
-        sys.exit(1)
+# Step 4 – Wait for All [XX] to appear
+wait.until(EC.presence_of_element_located((By.XPATH, "//label[contains(text(), 'All [')]")))
 
-    options = Options()
-    options.binary_location = "/usr/bin/chromium"
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
+# At this point the target page is fully loaded
+print("✅ Multi-Candidate Admin page loaded successfully!")
 
-    service = Service(executable_path="/usr/bin/chromedriver")
-    driver = webdriver.Chrome(service=service, options=options)
-    wait = WebDriverWait(driver, 30)
+# Optional: Debug Screenshot
+driver.save_screenshot("/tmp/admin_page_loaded.png")
 
-    try:
-        # Step 1: Log in
-        driver.execute_script("window.location = ("https://clients.hireintelligence.io/login")
-        wait.until(EC.presence_of_element_located((By.ID, "email")))
-
-        driver.find_element(By.ID, "email").send_keys(EMAIL)
-        driver.find_element(By.ID, "password").send_keys(PASSWORD)
-        driver.find_element(By.XPATH, "//button[contains(text(), 'Log In')]").click()
-
-        # Step 2: Wait for dashboard
-        wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(), 'YOUR JOBS')]")))
-        logging.info("✅ Logged in successfully")
-
-        capture(driver, "01_dashboard_loaded")
-
-        # Step 3: Manually go to multi-candidate-admin
-        logging.info("➡ Navigating to multi-candidate-admin")
-        driver.get("https://clients.hireintelligence.io/multi-candidate-admin")
-
-        # Step 4: Wait for a known element
-        wait.until(EC.presence_of_element_located((By.XPATH, "//h2[contains(text(), 'MULTI-CANDIDATE ADMIN')]")))
-        logging.info("✅ Reached Multi-Candidate Admin page")
-
-        capture(driver, "02_multi_candidate_admin_loaded")
-
-    except Exception as e:
-        logging.error(f"💥 Error: {e}")
-        capture(driver, "error")
-        raise
-    finally:
-        driver.quit()
-
-if __name__ == "__main__":
-    run()
+# Cleanup
+driver.quit()
