@@ -10,6 +10,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from google.cloud import storage
 
+# Set default bucket if not set via env
+os.environ.setdefault("DEBUG_SCREENSHOT_BUCKET", "recruitment-engine-cvs-sp-260625")
 
 def init_driver():
     chrome_options = Options()
@@ -46,6 +48,7 @@ def upload_to_gcs(filename):
 
 
 def login_and_capture():
+    print(f"Running screenshot job with bucket: {os.environ.get('DEBUG_SCREENSHOT_BUCKET')}")
     driver = init_driver()
     wait = WebDriverWait(driver, 15)
 
