@@ -1,7 +1,6 @@
 # Use a pre-built Selenium image with Chrome
-FROM selenium/standalone-chrome:latest
+FROM selenium/standalone-chrome:4.19.1-20240316 
 
-# Set timezone (if different from default in Selenium image)
 ENV TZ=Europe/London
 
 # Switch to the default user provided by the Selenium image (usually 'seluser')
