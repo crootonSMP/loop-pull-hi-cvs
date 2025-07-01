@@ -10,9 +10,9 @@ def init_driver():
     chrome_options.add_argument('--verbose')
     chrome_options.add_argument('--log-path=/tmp/chrome_debug_python.log') # Chrome's own logs
 
-    # --- CRITICAL CHANGES FOR selenium/standalone-chrome BASE IMAGE ---
-    # REMOVE binary_location - Selenium image manages Chrome's path
-    # chrome_options.binary_location = "/opt/chrome/chrome"
+    # --- CRITICAL CHANGE FOR selenium/standalone-chrome BASE IMAGE ---
+    # REMOVE chrome_options.binary_location = "/opt/chrome/chrome"
+    # The selenium/standalone-chrome image manages Chrome's path automatically.
 
     print("[DEBUG] Initializing headless Chrome WebDriver...")
     
