@@ -1,76 +1,41 @@
-# Use a slim Python base image
 FROM python:3.11-slim-bookworm
 
-# Environment setup
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/London
 
-# Install required packages (Chrome + system deps)
+# Install system packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc \
-    git \
-    ca-certificates \
-    curl \
-    unzip \
-    wget \
-    gnupg \
-    fonts-liberation \
-    libappindicator3-1 \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libcairo2 \
-    libcups2 \
-    libdbus-1-3 \
-    libdrm-dev \
-    libgbm-dev \
-    libgdk-pixbuf2.0-0 \
-    libglib2.0-0 \
-    libnspr4 \
-    libnss3 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxext6 \
-    libxfixes3 \
-    libxrandr2 \
-    libxrender1 \
-    libxshmfence-dev \
-    libxkbcommon0 \
-    xdg-utils \
-    tzdata && \
-    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+    curl unzip wget gnupg ca-certificates fonts-liberation \
+    libappindicator3-1 libasound2 libatk-bridge2.0-0 libatk1.0-0 \
+    libcairo2 libcups2 libdbus-1-3 libdrm2 libgbm1 libgdk-pixbuf2.0-0 \
+    libglib2.0-0 libnspr4 libnss3 libxcomposite1 libxdamage1 libxext6 \
+    libxfixes3 libxrandr2 libxrender1 libxshmfence1 libxkbcommon0 xdg-utils \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Google Chrome
-RUN mkdir -p /etc/apt/keyrings && \
-    wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg && \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list && \
-    apt-get update && \
-    apt-get install -y google-chrome-stable && \
-    rm -rf /var/lib/apt/lists/*
+# Install Chrome 125 and matching Chromedriver
+ENV CHROME_VERSION=125.0.6422.141
+RUN mkdir -p /opt/chrome && \
+    wget -q https://storage.googleapis.com/chrome-for-testing-public/$CHROME_VERSION/linux64/chrome-linux64.zip && \
+    unzip chrome-linux64.zip -d /opt/chrome && \
+    rm chrome-linux64.zip && \
+    ln -s /opt/chrome/chrome-linux64/chrome /usr/bin/google-chrome
 
-# Install Chromedriver (version must match Chrome)
-ENV CHROMEDRIVER_VERSION=138.0.7204.92
-RUN mkdir -p /usr/bin/chromedriver && \
-    wget -q "https://storage.googleapis.com/chrome-for-testing-public/${CHROMEDRIVER_VERSION}/linux64/chromedriver-linux64.zip" -O chromedriver.zip && \
-    unzip chromedriver.zip -d /usr/bin/chromedriver && \
-    rm chromedriver.zip && \
-    ln -s /usr/bin/chromedriver/chromedriver-linux64/chromedriver /usr/bin/chromedriver/chromedriver && \
-    chmod +x /usr/bin/chromedriver/chromedriver
+RUN mkdir -p /opt/chromedriver && \
+    wget -q https://storage.googleapis.com/chrome-for-testing-public/$CHROME_VERSION/linux64/chromedriver-linux64.zip && \
+    unzip chromedriver-linux64.zip -d /opt/chromedriver && \
+    rm chromedriver-linux64.zip && \
+    ln -s /opt/chromedriver/chromedriver-linux64/chromedriver /usr/bin/chromedriver
 
-ENV PATH="/usr/bin/chromedriver:$PATH"
-
-# Create non-root user for security
+# Add non-root user
 RUN useradd --create-home appuser
 WORKDIR /home/appuser/app
 USER appuser
 
-# Install Python dependencies
+# Install Python requirements
 COPY --chown=appuser:appuser requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy job script
+# Copy script
 COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
 
-# Entrypoint
 ENTRYPOINT ["python", "hi_candidate_screenshot_job.py"]
