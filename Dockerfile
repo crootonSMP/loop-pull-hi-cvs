@@ -50,7 +50,7 @@ RUN mkdir -p /etc/apt/keyrings && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Chromedriver (version must match Chrome)
-ENV CHROMEDRIVER_VERSION=125.0.6422.141
+ENV CHROMEDRIVER_VERSION=138.0.7204.92
 RUN mkdir -p /usr/bin/chromedriver && \
     wget -q "https://storage.googleapis.com/chrome-for-testing-public/${CHROMEDRIVER_VERSION}/linux64/chromedriver-linux64.zip" -O chromedriver.zip && \
     unzip chromedriver.zip -d /usr/bin/chromedriver && \
