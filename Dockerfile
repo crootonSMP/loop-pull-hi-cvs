@@ -1,22 +1,26 @@
-FROM selenium/standalone-chrome:123.0
+FROM python:3.11-slim
 
-# Switch to root to install additional packages
-USER root
-
-# Install Python and dependencies
+# Install OS dependencies
 RUN apt-get update && apt-get install -y \
-    python3-pip python3-dev && \
-    pip3 install --upgrade pip
+    wget gnupg unzip curl \
+    chromium chromium-driver \
+    fonts-liberation libappindicator3-1 libasound2 libatk-bridge2.0-0 \
+    libatk1.0-0 libcups2 libdbus-1-3 libgdk-pixbuf2.0-0 \
+    libnspr4 libnss3 libx11-xcb1 libxcomposite1 libxdamage1 \
+    libxrandr2 xdg-utils --no-install-recommends && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install
+# Set environment for Chrome
+ENV CHROME_BIN=/usr/bin/chromium
+ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
+
+# Install Python dependencies
 COPY requirements.txt .
-RUN pip3 install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy script
-COPY scrape_cv_links.py /app/scrape_cv_links.py
-
-# Set working dir
+# Copy your app
+COPY . /app
 WORKDIR /app
 
-# Command to run your script
-CMD ["python3", "scrape_cv_links.py"]
+# Run your Python script
+ENTRYPOINT ["python", "scrape_cv_links.py"]
