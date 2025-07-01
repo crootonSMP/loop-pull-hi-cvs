@@ -17,27 +17,47 @@ storage_client = storage.Client()
 
 def init_driver():
     chrome_options = Options()
-    chrome_options.add_argument('--headless=new')
-    chrome_options.add_argument('--no-sandbox') # Crucial for containers
-    chrome_options.add_argument('--disable-dev-shm-usage') # Prevents shared memory issues
-    chrome_options.add_argument('--disable-gpu') # Important for headless environments
+    # Keep these, as they are still useful even with Xvfb
+    chrome_options.add_argument('--headless=new') # Although Xvfb provides a virtual display, this keeps it internally headless
+    chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument('--disable-dev-shm-usage')
+    chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--window-size=1920,1080')
     chrome_options.add_argument('--remote-debugging-port=9222')
-    # Optional but good to have
-    chrome_options.add_argument('--disable-extensions')
-    chrome_options.add_argument('--disable-setuid-sandbox') # Redundant with --no-sandbox, but belt-and-suspenders
-    chrome_options.add_argument('--disable-features=NetworkService') # Sometimes helps with network errors
-
-    # Add verbose logging for the Python-launched Chrome session
+    # Add Python-level Chrome logging for more info if it crashes later
     chrome_options.add_argument('--verbose')
-    chrome_options.add_argument('--log-path=/tmp/chrome_debug_python.log') # Changed name to differentiate
+    chrome_options.add_argument('--log-path=/tmp/chrome_debug_python.log')
 
     print("[DEBUG] Initializing headless Chrome WebDriver...")
     
-    service = Service("/usr/bin/chromedriver") 
+    # Specify the executable_path to run Chrome via xvfb-run
+    # No need to use Service() here as we are providing executable_path directly
+    # and chromedriver is expected to be in PATH or located by Selenium.
+    driver = webdriver.Chrome(
+        executable_path="/usr/bin/chromedriver", # ChromeDriver is in /usr/bin/
+        options=chrome_options,
+        # This is the command that will actually start Chrome via Xvfb
+        # Xvfb: run a command in a new X server display
+        # :99: arbitrary display number
+        # -ac: disable access control
+        # -screen 0 1920x1080x24: screen resolution and color depth
+        # n: do not fork, stay in foreground
+        # -- : end of xvfb-run options
+        # /opt/chrome/chrome: path to the actual Chrome binary
+        service=Service(executable_path="/usr/bin/chromedriver") # Keep service for WebDriver.Chrome
+    )
+    
+    # We need to explicitly set the binary location if we're also using xvfb-run as the executable.
+    # The combination of `executable_path` and `service` with `binary_location` can be tricky.
+    # Let's try specifying binary_location for Chrome if we are running it via Xvfb.
+    # Selenium 4 generally uses Service for the driver and then options for the browser itself.
+    # Let's adjust for Xvfb and explicit binary path for the browser:
+
+    chrome_options.binary_location = "/opt/chrome/chrome" # Tell Selenium where the actual Chrome binary is
+
+    service = Service("/usr/bin/chromedriver") # Point to the ChromeDriver executable
 
     return webdriver.Chrome(service=service, options=chrome_options)
-
 def take_debug_screenshot(driver, name):
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
