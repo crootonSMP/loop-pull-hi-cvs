@@ -58,26 +58,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy your Python application script into the container
 COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
 
-# --- TEMPORARY ENTRYPOINT FOR DEEP DEBUGGING ---
-# This will try to launch Chrome manually first and print its output,
-# then run your Python script, and print its Chrome debug log if available.
+# --- TEMPORARY ENTRYPOINT FOR DEEP DEBUGGING (More Aggressive Output) ---
+# This will try to launch Chrome manually first and print its output directly to stderr,
+# then run your Python script.
 ENTRYPOINT ["/bin/bash", "-c", "\
-  echo '--- Attempting Chrome manual launch ---'; \
-  /opt/chrome/chrome --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --dump-dom 'about:blank' > /tmp/chrome_manual_output.log 2>&1; \
+  echo '--- Attempting Chrome manual launch (Direct to STDERR) ---' >&2; \
+  /opt/chrome/chrome --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --dump-dom 'about:blank' 2>&1; \
   RET_CODE=$?; \
-  echo '--- Chrome manual launch exited with code: '$RET_CODE' ---'; \
+  echo '--- Chrome manual launch exited with code: '$RET_CODE' (Direct to STDERR) ---' >&2; \
   \
-  # --- CRITICAL: Ensure this log is always printed and is clearly visible --- \
-  echo '--- CONTENTS OF /tmp/chrome_manual_output.log ---'; \
-  cat /tmp/chrome_manual_output.log; \
-  echo '--- END CONTENTS OF /tmp/chrome_manual_output.log ---'; \
-  \
-  echo '--- Attempting Python script launch ---'; \
+  echo '--- Attempting Python script launch ---' >&2; \
   python hi_candidate_screenshot_job.py 2>&1 | tee /dev/stderr; \
-  if [ -f /tmp/chrome_debug.log ]; then \
-    echo '--- CHROME DEBUG LOG from Python run ---'; \
-    cat /tmp/chrome_debug.log; \
-    echo '--- END CHROME DEBUG LOG ---'; \
-  fi \
+  # Removed chrome_debug.log cat for now, focusing on manual launch output \
 "]
 # --- END TEMPORARY ENTRYPOINT ---
