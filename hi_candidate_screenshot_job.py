@@ -50,21 +50,47 @@ def test_gcs_upload():
         return False
 
 # --- Initializes the Selenium WebDriver ---
+# --- Initializes the Selenium WebDriver ---
 def init_driver():
     chrome_options = Options()
     chrome_options.add_argument('--no-sandbox')
-    chrome_options.add_argument('--disable-dev-shm-usage')
+    chrome_options.add_argument('--disable-dev-shm-usage') # Prevents /dev/shm issues
     chrome_options.add_argument('--disable-gpu') # Good practice for headless
     chrome_options.add_argument('--window-size=1920,1080')
     chrome_options.add_argument('--remote-debugging-port=9222')
-    # chrome_options.add_argument('--verbose') # This line remains commented out/removed
-    chrome_options.add_argument('--log-path=/tmp/chrome_debug_python.log') # Chrome's own logs (stdout/stderr)
+    chrome_options.add_argument('--log-path=/tmp/chrome_debug_python.log') # Chrome's own logs
+
+    # --- FIX: Handle user data directory issue ---
+    chrome_options.add_argument('--disable-dev-shm-usage') # Often paired with no-profile
+    chrome_options.add_argument('--no-zygote') # Sometimes helps with process issues
+    chrome_options.add_argument('--single-process') # Can simplify process management in containers
+    # Tell Chrome not to use a persistent user profile
+    chrome_options.add_argument('--no-proxy-server') # Sometimes helps in docker
+    chrome_options.add_argument('--no-first-run')
+    chrome_options.add_argument('--no-default-browser-check')
+    chrome_options.add_argument('--disable-background-networking')
+    chrome_options.add_argument('--disable-client-side-phishing-detection')
+    chrome_options.add_argument('--disable-default-apps')
+    chrome_options.add_argument('--disable-hang-monitor')
+    chrome_options.add_argument('--disable-popup-blocking')
+    chrome_options.add_argument('--disable-prompt-on-repost')
+    chrome_options.add_argument('--disable-sync')
+    chrome_options.add_argument('--disable-translate')
+    chrome_options.add_argument('--metrics-recording-only')
+    chrome_options.add_argument('--enable-automation')
+    chrome_options.add_argument('--ignore-certificate-errors')
+    chrome_options.add_argument('--allow-insecure-localhost')
+
+    # This is the direct fix for "user data directory already in use"
+    # Create a temporary directory unique to this session for Chrome's user data
+    temp_user_data_dir = os.path.join("/tmp", "chrome-user-data-" + str(int(time.time())))
+    chrome_options.add_argument(f'--user-data-dir={temp_user_data_dir}')
+    # --- END FIX ---
 
     print("[DEBUG] Initializing headless Chrome WebDriver...")
-    sys.stdout.flush() # Ensure this print is seen
-    sys.stderr.flush() # Ensure this print is seen
+    sys.stdout.flush()
+    sys.stderr.flush()
     
-    # --- CRITICAL: Use Service with verbose ChromeDriver logging ---
     service = Service(log_path="/tmp/chromedriver_debug.log", verbose=True) 
 
     return webdriver.Chrome(service=service, options=chrome_options)
