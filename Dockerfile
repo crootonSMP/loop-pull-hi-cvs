@@ -74,10 +74,13 @@ USER appuser
 
 # Install Python dependencies from requirements.txt
 COPY --chown=appuser:appuser requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy your Python application script into the container
-COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
+# Create a virtual environment and activate it
+RUN python3.11 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install dependencies into the virtual environment
+RUN pip install --no-cache-dir -r requirements.txt
 
 # --- TEMPORARY ENTRYPOINT FOR FILE INSPECTION AFTER SCRIPT RUN ---
 # This will run your Python script, then list/cat temporary files, then exit.
