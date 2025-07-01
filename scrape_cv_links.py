@@ -1,43 +1,42 @@
 import os
 import time
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 EMAIL = os.environ["HIRE_USERNAME"]
 PASSWORD = os.environ["HIRE_PASSWORD"]
 
-options = Options()
-options.add_argument("--headless")
-options.add_argument("--no-sandbox")
-options.add_argument("--disable-dev-shm-usage")
+chrome_options = Options()
+chrome_options.add_argument("--headless")
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
 
-driver = webdriver.Chrome(options=options)
-driver.set_window_size(1280, 1024)
+driver = webdriver.Chrome(options=chrome_options)
+wait = WebDriverWait(driver, 30)
 
 try:
-    driver.get("https://clients.hireintelligence.io/")
-    time.sleep(3)
-    driver.save_screenshot("/tmp/01_initial_page.png")
+    driver.get("https://clients.hireintelligence.io/login")
+    
+    wait.until(EC.presence_of_element_located((By.NAME, "email"))).send_keys(EMAIL)
+    wait.until(EC.presence_of_element_located((By.NAME, "password"))).send_keys(PASSWORD)
+    wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Login')]"))).click()
+    
+    print("🔐 Login submitted")
 
-    wait = WebDriverWait(driver, 15)
-    email_input = wait.until(EC.presence_of_element_located((By.NAME, "email")))
-    email_input.send_keys(EMAIL)
-    password_input = driver.find_element(By.NAME, "password")
-    password_input.send_keys(PASSWORD)
-    login_button = driver.find_element(By.XPATH, "//button[@type='submit']")
-    login_button.click()
+    # Wait until the main jobs dashboard has loaded (e.g., wait for "Jobs Listed")
+    wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(), 'Jobs Listed')]")))
 
-    time.sleep(5)
-    driver.save_screenshot("/tmp/02_after_login_click.png")
+    print("✅ Login successful and dashboard loaded")
 
-    # wait for main page to load
-    wait.until(EC.text_to_be_present_in_element((By.TAG_NAME, "body"), "Jobs Listed"))
+    # DEBUG screenshot
+    driver.save_screenshot("/tmp/after_login.png")
 
-    driver.save_screenshot("/tmp/03_dashboard_loaded.png")
+except Exception as e:
+    print("❌ Error during login or load:", e)
+    driver.save_screenshot("/tmp/error.png")
 
 finally:
     driver.quit()
-
