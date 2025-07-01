@@ -29,7 +29,7 @@ echo "Dockerfile content (snippet):"
 head -n 20 Dockerfile
 echo "requirements.txt content:"
 cat requirements.txt
-
+echo "⛽️⛽️⛽️⛽️⛽️⛽️"
 # Step 2: Build and tag the Docker image
 echo "Step 2: Building and tagging Docker image: ${IMAGE_NAME}"
 docker build -t "${IMAGE_NAME}" . || exit 1
