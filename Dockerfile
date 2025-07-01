@@ -59,24 +59,25 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
 
 # --- TEMPORARY ENTRYPOINT FOR DEEP DEBUGGING ---
+# This will try to launch Chrome manually first and print its output,
+# then run your Python script, and print its Chrome debug log if available.
 ENTRYPOINT ["/bin/bash", "-c", "\
   echo '--- Attempting Chrome manual launch ---'; \
   /opt/chrome/chrome --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --dump-dom 'about:blank' > /tmp/chrome_manual_output.log 2>&1; \
   RET_CODE=$?; \
   echo '--- Chrome manual launch exited with code: '$RET_CODE' ---'; \
-  cat /tmp/chrome_manual_output.log || echo 'Manual Chrome log not found'; \
-  echo '--- End Chrome manual launch output ---'; \
+  \
+  # --- CRITICAL: Ensure this log is always printed and is clearly visible --- \
+  echo '--- CONTENTS OF /tmp/chrome_manual_output.log ---'; \
+  cat /tmp/chrome_manual_output.log; \
+  echo '--- END CONTENTS OF /tmp/chrome_manual_output.log ---'; \
   \
   echo '--- Attempting Python script launch ---'; \
   python hi_candidate_screenshot_job.py 2>&1 | tee /dev/stderr; \
-  echo '--- Checking /tmp for Chrome debug logs ---'; \
-  ls -la /tmp; \
   if [ -f /tmp/chrome_debug.log ]; then \
     echo '--- CHROME DEBUG LOG from Python run ---'; \
     cat /tmp/chrome_debug.log; \
     echo '--- END CHROME DEBUG LOG ---'; \
-  else \
-    echo 'CHROME LOG NOT FOUND'; \
-  fi"]
+  fi \
+"]
 # --- END TEMPORARY ENTRYPOINT ---
-
