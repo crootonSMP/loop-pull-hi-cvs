@@ -11,8 +11,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from google.cloud import storage
 
-# Set default bucket if not set via env
-BUCKET_NAME = os.environ.get("DEBUG_SCREENSHOT_BUCKET", "recruitment-engine-cvs-sp-260625")
+# Define GCS bucket
+BUCKET_NAME = os.getenv("DEBUG_SCREENSHOT_BUCKET", "recruitment-engine-cvs-sp-260625")
 storage_client = storage.Client()
 
 def init_driver():
@@ -37,7 +37,8 @@ def take_debug_screenshot(driver, name):
         success = driver.save_screenshot(filename)
         return filename if success else None
     except Exception as e:
-        print(f"[ERROR] Screenshot failed: {e}")
+        print(f"[ERROR] Failed to take screenshot: {e}")
+        traceback.print_exc()
         return None
 
 def upload_to_gcs(filename):
@@ -51,6 +52,7 @@ def upload_to_gcs(filename):
         print(f"[DEBUG] Uploaded to GCS: gs://{BUCKET_NAME}/debug/{filename}")
     except Exception as e:
         print(f"[ERROR] GCS upload failed: {e}")
+        traceback.print_exc()
 
 def login_and_capture():
     print(f"[DEBUG] Starting screenshot job. GCS Bucket: {BUCKET_NAME}")
@@ -60,7 +62,9 @@ def login_and_capture():
     try:
         print("[DEBUG] Navigating to login page...")
         driver.get("https://clients.hireintelligence.io/login")
-        take_debug_screenshot(driver, "login_page_loaded")
+        filename = take_debug_screenshot(driver, "login_page_loaded")
+        if filename:
+            upload_to_gcs(filename)
 
         username = os.environ.get("HIRE_USERNAME")
         password = os.environ.get("HIRE_PASSWORD")
@@ -72,7 +76,9 @@ def login_and_capture():
         print("[DEBUG] Submitted login form.")
 
         wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(),'Jobs Listed')]")))
-        take_debug_screenshot(driver, "dashboard_loaded")
+        filename = take_debug_screenshot(driver, "dashboard_loaded")
+        if filename:
+            upload_to_gcs(filename)
 
         print("[DEBUG] Navigating to Multi-Candidate View...")
         multi_view_button = wait.until(EC.element_to_be_clickable((
@@ -80,15 +86,21 @@ def login_and_capture():
         multi_view_button.click()
 
         wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(),'Candidate Tracker')]")))
-        take_debug_screenshot(driver, "multi_candidate_view")
+        filename = take_debug_screenshot(driver, "multi_candidate_view")
+        if filename:
+            upload_to_gcs(filename)
 
     except TimeoutException as e:
         print("[ERROR] Timeout waiting for page element:", e)
-        take_debug_screenshot(driver, "timeout_error")
+        filename = take_debug_screenshot(driver, "timeout_error")
+        if filename:
+            upload_to_gcs(filename)
     except Exception as e:
         print("[ERROR] Unexpected error:", e)
         traceback.print_exc()
-        take_debug_screenshot(driver, "unexpected_error")
+        filename = take_debug_screenshot(driver, "unexpected_error")
+        if filename:
+            upload_to_gcs(filename)
     finally:
         print("[DEBUG] Closing browser.")
         driver.quit()
