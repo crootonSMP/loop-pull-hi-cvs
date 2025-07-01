@@ -1,87 +1,117 @@
 import os
-import sys
+import time
+import traceback
+from datetime import datetime
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
+from google.cloud import storage
 
-print("[DEBUG] Script starting: Initial print executed.") # This *must* appear
+print("[DEBUG] Script started: __main__ block executing.") # TOP-LEVEL ENTRY POINT
 
-try:
-    print("[DEBUG] Attempting import time...")
-    import time
-    print("[DEBUG] import time successful.")
+# Define GCS bucket
+BUCKET_NAME = os.getenv("DEBUG_SCREENSHOT_BUCKET", "recruitment-engine-cvs-sp-260625")
+storage_client = storage.Client() # Global client for efficiency
 
-    print("[DEBUG] Attempting import traceback...")
-    import traceback
-    print("[DEBUG] import traceback successful.")
+# --- Function to test GCS connectivity ---
+def test_gcs_upload():
+    print("[DEBUG] Entered test_gcs_upload()")
+    test_filename = f"gcs_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    test_content = f"This is a test file uploaded from Cloud Run at {datetime.now().isoformat()}."
+    test_blob_name = f"debug_test/{test_filename}"
 
-    print("[DEBUG] Attempting import datetime...")
-    from datetime import datetime
-    print("[DEBUG] import datetime successful.")
+    print(f"[DEBUG] Attempting to upload GCS test file: {test_blob_name}")
+    try:
+        bucket = storage_client.bucket(BUCKET_NAME)
+        blob = bucket.blob(test_blob_name)
+        blob.upload_from_string(test_content)
+        print(f"[DEBUG] Successfully uploaded GCS test file: gs://{BUCKET_NAME}/{test_blob_name}")
+        return True
+    except Exception as e:
+        print(f"[ERROR] Failed to upload GCS test file: {e}")
+        traceback.print_exc()
+        return False
 
-    print("[DEBUG] Attempting import google.cloud.storage...")
-    from google.cloud import storage
-    print("[DEBUG] import google.cloud.storage successful.")
+# --- Initializes the Selenium WebDriver ---
+def init_driver():
+    chrome_options = Options()
+    chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument('--disable-dev-shm-usage')
+    chrome_options.add_argument('--disable-gpu') # Good practice for headless
+    chrome_options.add_argument('--window-size=1920,1080')
+    chrome_options.add_argument('--remote-debugging-port=9222')
+    
+    # --- chrome_options.add_argument('--verbose') REMOVED here per debugging ---
+    chrome_options.add_argument('--log-path=/tmp/chrome_debug_python.log') # Chrome's own logs (stdout/stderr)
 
-    # --- Add the GCS test function (copy it from your full script) ---
-    # Define GCS bucket
-    BUCKET_NAME = os.getenv("DEBUG_SCREENSHOT_BUCKET", "recruitment-engine-cvs-sp-260625")
-    storage_client = storage.Client()
+    print("[DEBUG] Initializing headless Chrome WebDriver...")
+    
+    # --- CRITICAL: Use Service with verbose ChromeDriver logging ---
+    service = Service(log_path="/tmp/chromedriver_debug.log", verbose=True) 
 
-    def test_gcs_upload():
-        test_filename = f"gcs_test_import_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        test_content = f"Import debug test from Cloud Run at {datetime.now().isoformat()}."
-        test_blob_name = f"debug_import/{test_filename}" 
+    return webdriver.Chrome(service=service, options=chrome_options)
 
-        print(f"[DEBUG] Attempting to upload GCS import test file: {test_blob_name}")
+# --- Takes a screenshot ---
+def take_debug_screenshot(driver, name):
+    try:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"screenshot_{name}_{timestamp}.png"
+        print(f"[DEBUG] Attempting to save screenshot to: {os.path.join(os.getcwd(), filename)}")
+        success = driver.save_screenshot(filename)
+        if success:
+            print(f"Saved screenshot: {filename}")
+            return filename
+        else:
+            print(f"[ERROR] driver.save_screenshot() returned False for {filename}")
+            return None
+    except Exception as e:
+        print(f"[ERROR] Failed to take screenshot: {e}")
+        traceback.print_exc()
+        return None
+
+# --- Uploads file to GCS ---
+def upload_to_gcs(filename):
+    if not os.path.exists(filename):
+        print(f"[ERROR] File does not exist locally: {filename}. Cannot upload to GCS.")
+        return
+    try:
+        bucket = storage_client.bucket(BUCKET_NAME)
+        blob = bucket.blob(f"debug/{filename}")
+        print(f"[DEBUG] Attempting GCS upload for {filename} to gs://{BUCKET_NAME}/debug/{filename}")
+        blob.upload_from_filename(filename)
+        print(f"Uploaded {filename} to gs://{BUCKET_NAME}/debug/{filename}")
+    except Exception as e:
+        print(f"[ERROR] GCS upload failed for {filename}: {e}")
+        traceback.print_exc()
+    finally:
         try:
-            bucket = storage_client.bucket(BUCKET_NAME)
-            blob = bucket.blob(test_blob_name)
-            blob.upload_from_string(test_content)
-            print(f"[DEBUG] Successfully uploaded GCS import test file: gs://{BUCKET_NAME}/{test_blob_name}")
-            return True
+            if os.path.exists(filename):
+                os.remove(filename)
+                print(f"Deleted local screenshot file: {filename}")
         except Exception as e:
-            print(f"[ERROR] Failed to upload GCS import test file: {e}")
-            traceback.print_exc()
-            return False
-    # --- End GCS test function ---
+            print(f"Failed to delete local file {filename}: {e}")
+
+# --- Main workflow ---
+def login_and_capture():
+    print(f"[DEBUG] Starting screenshot job. GCS Bucket: {BUCKET_NAME}")
 
     if not test_gcs_upload():
-        print("[ERROR] GCS connectivity test failed. Aborting script.")
-        sys.exit(1) # Exit with error if GCS fails here
+        print("[ERROR] GCS connectivity test failed. Aborting script as GCS is required.")
+        return
 
-    print("[DEBUG] Attempting import selenium...")
-    from selenium import webdriver
-    from selenium.webdriver.chrome.options import Options
-    from selenium.webdriver.chrome.service import Service
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-    from selenium.common.exceptions import TimeoutException
-    print("[DEBUG] import selenium successful.")
-
-    print("[DEBUG] All imports successful. Script should now try init_driver().")
-
-    # --- Keep only init_driver call and wrap in try/except ---
-    # No need for full login_and_capture yet.
-    driver = None
+    print("[DEBUG] Attempting to initialize WebDriver...")
+    driver = None # Initialize driver to None for finally block
     try:
-        chrome_options = Options()
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
-        chrome_options.add_argument('--disable-gpu')
-        chrome_options.add_argument('--window-size=1920,1080')
-        chrome_options.add_argument('--remote-debugging-port=9222')
-        chrome_options.add_argument('--verbose')
-        chrome_options.add_argument('--log-path=/tmp/chrome_debug_python.log')
-        
-        print("[DEBUG] Initializing headless Chrome WebDriver...")
-        service = Service(log_path="/tmp/chromedriver_debug.log", verbose=True) 
-        driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver = init_driver()
         print("[DEBUG] WebDriver initialized successfully.")
-        driver.quit() # Quit immediately after successful init for this test
-        print("[DEBUG] WebDriver quit successfully for test.")
-
     except Exception as e:
-        print(f"[ERROR] WebDriver initialization or basic usage failed: {e}")
+        print(f"[ERROR] Failed to initialize WebDriver: {e}")
         traceback.print_exc()
+        # --- Check for both Chrome and Chromedriver logs here ---
         if os.path.exists("/tmp/chrome_debug_python.log"):
             print("--- Contents of /tmp/chrome_debug_python.log after init failure ---")
             with open("/tmp/chrome_debug_python.log", "r") as f:
@@ -97,8 +127,63 @@ try:
             print("--- End contents of /tmp/chromedriver_debug.log ---")
         else:
             print("No /tmp/chromedriver_debug.log found.")
+        
+        return # Abort if driver fails to init
 
-finally:
-    if driver:
-        driver.quit() # Ensure driver is quit even if other errors occur
-    print("[DEBUG] Script ending: Finally block executed.")
+    wait = WebDriverWait(driver, 15)
+
+    try:
+        print("[DEBUG] Navigating to login page...")
+        driver.get("https://clients.hireintelligence.io/login")
+        filename = take_debug_screenshot(driver, "login_page_loaded")
+        if filename:
+            upload_to_gcs(filename)
+
+        username = os.environ.get("HIRE_USERNAME")
+        password = os.environ.get("HIRE_PASSWORD")
+        print(f"[DEBUG] Using username: {username}") # Consider masking username in production
+
+        wait.until(EC.presence_of_element_located((By.ID, "email"))).send_keys(username)
+        wait.until(EC.presence_of_element_located((By.ID, "password"))).send_keys(password)
+        wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Sign In')]"))).click()
+        print("[DEBUG] Submitted login form.")
+
+        wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(),'Jobs Listed')]")))
+        print("[DEBUG] Dashboard loaded.")
+        filename = take_debug_screenshot(driver, "dashboard_loaded")
+        if filename:
+            upload_to_gcs(filename)
+
+        print("[DEBUG] Navigating to Multi-Candidate View...")
+        multi_view_button = wait.until(EC.element_to_be_clickable((
+            By.XPATH, "//button[contains(text(),'Multi-Candidate View')]")))
+        multi_view_button.click()
+
+        wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(),'Candidate Tracker')]")))
+        print("[DEBUG] Multi-candidate view loaded.")
+        filename = take_debug_screenshot(driver, "multi_candidate_view")
+        if filename:
+            upload_to_gcs(filename)
+
+    except TimeoutException as e:
+        print("[ERROR] Timeout waiting for page element:", e)
+        traceback.print_exc()
+        filename = take_debug_screenshot(driver, "timeout_error") # Take error screenshot
+        if filename:
+            upload_to_gcs(filename)
+    except Exception as e:
+        print("[ERROR] Unexpected error:", e)
+        traceback.print_exc()
+        filename = take_debug_screenshot(driver, "unexpected_error") # Take error screenshot
+        if filename:
+            upload_to_gcs(filename)
+    finally:
+        if driver: # Ensure driver exists before quitting
+            print("[DEBUG] Closing browser.")
+            driver.quit()
+        else:
+            print("[DEBUG] Driver not initialized, no browser to close.")
+
+
+if __name__ == "__main__":
+    login_and_capture()
