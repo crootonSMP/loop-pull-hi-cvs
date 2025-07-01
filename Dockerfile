@@ -17,12 +17,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fontconfig \
     dbus-x11 \
     lsb-release \
-    libgconf-2-4 \  # <--- ADD THIS LINE
-    xvfb \          # <--- ENSURE THIS IS PRESENT
+    libgconf-2-4 \
+    xvfb \ # Keep this one here
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
-
-RUN apt-get install -y xvfb
 
 # Pin Chrome and Chromedriver to a specific version for stability.
 # This ensures perfect compatibility between the browser and its driver.
