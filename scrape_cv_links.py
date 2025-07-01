@@ -49,7 +49,7 @@ def run():
 
     try:
         # Step 1: Log in
-        driver.get("https://clients.hireintelligence.io/login")
+        driver.execute_script("window.location = ("https://clients.hireintelligence.io/login")
         wait.until(EC.presence_of_element_located((By.ID, "email")))
 
         driver.find_element(By.ID, "email").send_keys(EMAIL)
