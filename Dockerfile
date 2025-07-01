@@ -25,14 +25,11 @@ RUN pip install --no-cache-dir -r requirements.txt --break-system-packages # Thi
 # Copy your Python application script into the container
 COPY --chown=seluser:seluser hi_candidate_screenshot_job.py .
 
-# --- Simplified ENTRYPOINT for pre-built image ---
-# The Selenium image handles Xvfb/display and Chrome/Chromedriver setup internally.
-# We just run your Python script.
 ENTRYPOINT ["/bin/bash", "-c", "\
   echo '--- Running Python script (from Selenium base image) ---' >&2; \
+  export DISPLAY=:99; \
   python hi_candidate_screenshot_job.py 2>&1; \
   SCRIPT_EXIT_CODE=$?; \
-  \
   echo '--- Python script finished with exit code: '$SCRIPT_EXIT_CODE' ---' >&2; \
   exit $SCRIPT_EXIT_CODE; \
 "]
