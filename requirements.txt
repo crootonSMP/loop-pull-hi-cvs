@@ -1,7 +1,20 @@
+# Python Dependencies for daily_candidate_importer.py (Consolidated)
+
+# Google Cloud Client Libraries
 google-cloud-storage==2.16.0
 google-cloud-secret-manager==2.19.0
 google-auth==2.29.0
+
+# Data Manipulation (kept as per original, though not strictly used in new script)
 pandas==2.2.2
 openpyxl==3.1.2
+
+# HTTP Requests (kept as per original)
 requests==2.32.3
-selenium==4.20.0
+
+# Database dependencies for Cloud SQL integration (kept as per original)
+sqlalchemy==2.0.30
+cloud-sql-python-connector[pg8000]
+
+# Web Automation
+selenium==4.22.0
