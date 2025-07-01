@@ -9,9 +9,12 @@ RUN npm install
 # --- FIX: Install missing shared libraries for Chrome ---
 # libgobject-2.0.so.0 is provided by libglib2.0-0 (already added from previous step)
 # libnss3.so is provided by libnss3
+# --- FIX: Install missing shared libraries for Chrome ---
+# libgobject-2.0.so.0 is provided by libglib2.0-0
+# libnss3.so is provided by libnss3
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libglib2.0-0 \
-    libnss3 \ # <--- ADD THIS LINE
+    libglib2.0-0 \  # <--- Ensure this line (and previous package lines) ends with a backslash
+    libnss3 \
     # Often, a more comprehensive list of common Chrome dependencies is recommended for minimal images:
     libnspr4 \
     libatk1.0-0 \
@@ -44,7 +47,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 # --- END FIX ---
-
 # Copy your application code
 COPY . .
 
