@@ -16,37 +16,47 @@ options.add_argument('--disable-dev-shm-usage')
 options.add_argument('--window-size=1920,1080')
 
 driver = webdriver.Chrome(options=options)
-wait = WebDriverWait(driver, 40)
+wait = WebDriverWait(driver, 30)
 
 try:
-    print("🔍 Loading login page...")
+    print("🔍 Opening login page...")
     driver.get("https://clients.hireintelligence.io/")
     time.sleep(2)
-    driver.save_screenshot("/tmp/loaded_login.png")  # EARLY SCREENSHOT
+    driver.save_screenshot("/tmp/step1_initial_page.png")
 
-    print("🔐 Filling login form...")
-    wait.until(EC.presence_of_element_located((By.NAME, "email"))).send_keys(EMAIL)
-    driver.find_element(By.NAME, "password").send_keys(PASSWORD)
-    driver.find_element(By.XPATH, "//button[contains(text(), 'Log In')]").click()
+    print("🔐 Trying to find login field...")
+    try:
+        email_field = wait.until(EC.presence_of_element_located((By.NAME, "email")))
+        email_field.send_keys(EMAIL)
+        driver.find_element(By.NAME, "password").send_keys(PASSWORD)
+        driver.find_element(By.XPATH, "//button[contains(text(), 'Log In')]").click()
+        print("✅ Login submitted!")
+    except Exception as e:
+        print("❌ Login fields not found.")
+        driver.save_screenshot("/tmp/step2_login_failed.png")
+        with open("/tmp/login_page.html", "w") as f:
+            f.write(driver.page_source)
+        raise
 
-    print("⏳ Waiting for dashboard (Jobs Listed)...")
+    print("⏳ Waiting for job page to load...")
     wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(), 'Jobs Listed')]")))
-    driver.save_screenshot("/tmp/after_login.png")
-    print("✅ Dashboard loaded!")
+    driver.save_screenshot("/tmp/step3_after_login.png")
+    print("✅ Login successful!")
 
-    print("➡️ Navigating to candidate admin page...")
+    print("➡️ Navigating to multi-candidate admin page...")
     driver.execute_script("window.location.href = 'https://clients.hireintelligence.io/multi-candidate-admin'")
+    time.sleep(3)
+    driver.save_screenshot("/tmp/step4_candidate_page_loaded.png")
 
-    print("⏳ Waiting for candidate admin to show All [")
+    print("⏳ Waiting for All [number] to appear...")
     wait.until(EC.presence_of_element_located((By.XPATH, "//label[contains(text(), 'All [')]")))
-    driver.save_screenshot("/tmp/final_admin_page.png")
-    print("✅ Multi-candidate admin page ready!")
+    driver.save_screenshot("/tmp/step5_admin_ready.png")
+    print("✅ All done!")
 
 except Exception as e:
-    print("❌ FAILED with exception:")
+    print("❌ Full failure caught")
     traceback.print_exc()
-    driver.save_screenshot("/tmp/failure.png")
-    raise
+    driver.save_screenshot("/tmp/final_error.png")
 
 finally:
     driver.quit()
