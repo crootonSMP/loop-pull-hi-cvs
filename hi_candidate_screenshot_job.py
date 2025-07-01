@@ -11,7 +11,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from google.cloud import storage
 
-# Define GCS bucket (using os.getenv is good)
+# Define GCS bucket
 BUCKET_NAME = os.getenv("DEBUG_SCREENSHOT_BUCKET", "recruitment-engine-cvs-sp-260625")
 storage_client = storage.Client() # Global client is good
 
@@ -34,27 +34,10 @@ def test_gcs_upload():
         return False
 # --- END NEW FUNCTION ---
 
-# ... (init_driver function) ...
-
-# ... (take_debug_screenshot function) ...
-
-# ... (upload_to_gcs function) ...
-
-def login_and_capture():
-    print(f"[DEBUG] Starting screenshot job. GCS Bucket: {BUCKET_NAME}")
-    
-    # --- CALL NEW GCS TEST FUNCTION HERE ---
-    if not test_gcs_upload():
-        print("[ERROR] GCS connectivity test failed. Aborting script.")
-        # Optionally, raise an exception or exit here if GCS is critical for even starting.
-        # For now, we'll let it proceed to see if other errors arise.
-    # --- END CALL ---
-
-    driver = init_driver()
-    wait = WebDriverWait(driver, 15)
-
+# --- init_driver function (correctly positioned) ---
 def init_driver():
     chrome_options = Options()
+    # No --headless=new when using Xvfb with binary_location pointing to Chrome
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu') # Still good practice for headless
@@ -64,29 +47,18 @@ def init_driver():
     chrome_options.add_argument('--verbose')
     chrome_options.add_argument('--log-path=/tmp/chrome_debug_python.log')
     
-    # --- CRITICAL CHANGE FOR XVFB ---
-    # Tell Selenium to use the Chrome binary *wrapped by xvfb-run*
-    chrome_options.binary_location = "/usr/bin/xvfb-run" 
-    chrome_options.add_argument("-a") # xvfb-run: automatically pick a free display
-    chrome_options.add_argument("-s") # xvfb-run: arguments for Xvfb itself
-    chrome_options.add_argument("-screen") # xvfb-run: arguments for Xvfb itself
-    chrome_options.add_argument("0") # xvfb-run: arguments for Xvfb itself
-    chrome_options.add_argument("1920x1080x24") # xvfb-run: arguments for Xvfb itself
-    chrome_options.add_argument("--") # xvfb-run: separator between xvfb-run options and the command to run
-    chrome_options.add_argument("/opt/chrome/chrome") # The actual Chrome binary path
+    # --- Critical for Xvfb: Point binary_location to the actual Chrome executable ---
+    # The Xvfb display will be provided by the Docker ENTRYPOINT
+    chrome_options.binary_location = "/opt/chrome/chrome" 
 
-    # Remove --headless=new when using xvfb, as Xvfb provides the display.
-    # While Chrome internally still can be headless, it's often simpler to let Xvfb manage the display.
-    # If it fails, you can try re-adding '--headless=new' to chrome_options.add_argument()
-    # but for now, let's remove it for Xvfb integration clarity.
-    # chrome_options.argument('--headless=new') # Removed for Xvfb
-
-    print("[DEBUG] Initializing headless Chrome WebDriver with Xvfb...")
+    print("[DEBUG] Initializing headless Chrome WebDriver with Xvfb/DISPLAY...")
     
     service = Service("/usr/bin/chromedriver") # Point to the ChromeDriver executable
 
     return webdriver.Chrome(service=service, options=chrome_options)
- 
+# --- END init_driver function ---
+
+# --- take_debug_screenshot function ---
 def take_debug_screenshot(driver, name):
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -98,10 +70,12 @@ def take_debug_screenshot(driver, name):
         print(f"[ERROR] Failed to take screenshot: {e}")
         traceback.print_exc()
         return None
+# --- END take_debug_screenshot function ---
 
+# --- upload_to_gcs function ---
 def upload_to_gcs(filename):
     if not os.path.exists(filename):
-        print(f"[ERROR] File does not exist: {filename}")
+        print(f"[ERROR] File does not exist locally: {filename}")
         return
     try:
         bucket = storage_client.bucket(BUCKET_NAME)
@@ -111,10 +85,34 @@ def upload_to_gcs(filename):
     except Exception as e:
         print(f"[ERROR] GCS upload failed: {e}")
         traceback.print_exc()
+# --- END upload_to_gcs function ---
 
+# --- login_and_capture function (complete and correctly positioned) ---
 def login_and_capture():
     print(f"[DEBUG] Starting screenshot job. GCS Bucket: {BUCKET_NAME}")
-    driver = init_driver()
+    
+    # --- CALL NEW GCS TEST FUNCTION HERE (runs before driver init) ---
+    if not test_gcs_upload():
+        print("[ERROR] GCS connectivity test failed. This is a critical issue. Aborting script.")
+        return # Abort if GCS upload test fails
+
+    print("[DEBUG] Attempting to initialize WebDriver...")
+    try:
+        driver = init_driver()
+        print("[DEBUG] WebDriver initialized successfully.")
+    except Exception as e:
+        print(f"[ERROR] Failed to initialize WebDriver: {e}")
+        traceback.print_exc()
+        # Try to capture Chrome's own debug log if initialization fails
+        if os.path.exists("/tmp/chrome_debug_python.log"):
+            print("--- Contents of /tmp/chrome_debug_python.log after init failure ---")
+            with open("/tmp/chrome_debug_python.log", "r") as f:
+                print(f.read())
+            print("--- End contents of /tmp/chrome_debug_python.log ---")
+        else:
+            print("No /tmp/chrome_debug_python.log found after init failure.")
+        return # Abort if driver fails to init
+
     wait = WebDriverWait(driver, 15)
 
     try:
@@ -134,6 +132,7 @@ def login_and_capture():
         print("[DEBUG] Submitted login form.")
 
         wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(),'Jobs Listed')]")))
+        print("[DEBUG] Dashboard loaded.")
         filename = take_debug_screenshot(driver, "dashboard_loaded")
         if filename:
             upload_to_gcs(filename)
@@ -144,12 +143,14 @@ def login_and_capture():
         multi_view_button.click()
 
         wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(),'Candidate Tracker')]")))
+        print("[DEBUG] Multi-candidate view loaded.")
         filename = take_debug_screenshot(driver, "multi_candidate_view")
         if filename:
             upload_to_gcs(filename)
 
     except TimeoutException as e:
         print("[ERROR] Timeout waiting for page element:", e)
+        traceback.print_exc()
         filename = take_debug_screenshot(driver, "timeout_error")
         if filename:
             upload_to_gcs(filename)
@@ -162,6 +163,7 @@ def login_and_capture():
     finally:
         print("[DEBUG] Closing browser.")
         driver.quit()
+# --- END login_and_capture function ---
 
 if __name__ == "__main__":
     login_and_capture()
