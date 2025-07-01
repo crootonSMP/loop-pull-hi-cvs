@@ -12,7 +12,7 @@ WORKDIR /home/seluser
 # Install Python dependencies from requirements.txt
 # We'll create a virtual environment for your dependencies.
 RUN python3 -m venv venv && \
-    /usr/bin/python3 -m pip install --upgrade pip --break-system-packages # <-- FIX APPLIED HERE
+    venv/bin/python -m pip install --upgrade pip --break-system-packages # <-- FIX APPLIED HERE: Use venv's pip
 
 # Add the virtual environment's bin directory to the PATH
 ENV PATH="/home/seluser/venv/bin:$PATH"
@@ -21,7 +21,7 @@ ENV PATH="/home/seluser/venv/bin:$PATH"
 COPY --chown=seluser:seluser requirements.txt .
 
 # Install Python dependencies into the virtual environment
-RUN pip install --no-cache-dir -r requirements.txt --break-system-packages # <-- FIX APPLIED HERE
+RUN pip install --no-cache-dir -r requirements.txt --break-system-packages # This pip will now be the one from venv/bin
 
 # Copy your Python application script into the container
 COPY --chown=seluser:seluser hi_candidate_screenshot_job.py .
