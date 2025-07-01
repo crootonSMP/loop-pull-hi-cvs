@@ -5,9 +5,10 @@ FROM debian:bookworm
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/London
 
+# ... (lines before RUN apt-get update) ...
+
 # Install Python 3.11, pip, and essential build tools
 # Also include all system packages for Chrome headless
-# This RUN command is now correctly structured with backslashes and && operators.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11 \
     python3-pip \
@@ -46,8 +47,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     lsb-release \
     libgconf-2-4 \
     xvfb \
+    # --- ADD THESE CORE LIBRARIES ---
+    libssl-dev \
+    zlib1g-dev \
+    libffi-dev \
+    # --- END ADDITION ---
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
+
+# --- ADD THESE ENVIRONMENT VARIABLES FOR LOCALE ---
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+# --- END ADDITION ---
+
+# ... (rest of your Dockerfile, including the ENTRYPOINT from last time) ...
 
 # Set python3.11 as default python
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
