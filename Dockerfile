@@ -97,16 +97,25 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy your Python application script into the container
 COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
 
-# --- TEMPORARY ENTRYPOINT FOR FILE INSPECTION AFTER SCRIPT RUN ---
-# This will run your Python script, then list/cat temporary files, then exit.
+# ... (rest of your Dockerfile remains identical) ...
+
+# --- TEMPORARY ENTRYPOINT FOR EXTREME EARLY DEBUGGING ---
 ENTRYPOINT ["/bin/bash", "-c", "\
-  echo '--- Running Python script ---' >&2; \
+  echo '--- ENTRYPOINT START ---' >&2; \
+  echo '--- Checking Python version ---' >&2; \
+  python --version >&2; \
+  echo '--- Starting Xvfb ---' >&2; \
   Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset & \
   XVFB_PID=$!; \
-  sleep 3; # Give Xvfb time to start \
+  sleep 3; \
   echo '--- Xvfb started with PID '$XVFB_PID' ---' >&2; \
-  python hi_candidate_screenshot_job.py 2>&1 | tee /dev/stderr; \
+  echo '--- Running Python script (full output redirected) ---' >&2; \
+  \
+  # Execute Python script and send all its output to stderr immediately \
+  python hi_candidate_screenshot_job.py 2>&1; \
   SCRIPT_EXIT_CODE=$?; \
+  \
+  echo '--- Python script finished with exit code: '$SCRIPT_EXIT_CODE' ---' >&2; \
   \
   kill $XVFB_PID || true; \
   echo '--- Xvfb process killed ---' >&2; \
@@ -131,6 +140,6 @@ ENTRYPOINT ["/bin/bash", "-c", "\
   fi; \
   echo '--- END CHROME DEBUG LOG ---' >&2; \
   \
-  echo '--- Container exiting with script code ---' >&2; \
+  echo '--- Container exiting with final code: '$SCRIPT_EXIT_CODE' ---' >&2; \
   exit $SCRIPT_EXIT_CODE; \
 "]
