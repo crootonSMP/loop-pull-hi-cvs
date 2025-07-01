@@ -7,6 +7,7 @@ ENV TZ=Europe/London
 
 # Install Python 3.11, pip, and essential build tools
 # Also include all system packages for Chrome headless
+# This RUN command is now correctly structured with backslashes and && operators.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11 \
     python3-pip \
@@ -68,28 +69,32 @@ RUN wget -q https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VE
     chmod +x /usr/bin/chromedriver && \
     rm -rf chromedriver-linux64.zip chromedriver-linux64
 
-# Create a non-root user for improved security
+# Create the .X11-unix directory and set permissions BEFORE switching to non-root user
+RUN mkdir -p /tmp/.X11-unix && \
+    chmod 1777 /tmp/.X11-unix && \
+    chown root:root /tmp/.X11-unix
+
+# Create a non-root user for improved security (This section is unique and correct)
 RUN useradd --create-home appuser
 
 # Switch to the non-root user before performing operations as that user
 USER appuser
 # Set WORKDIR after switching user if it's user's home
-WORKDIR /home/appuser/app 
+WORKDIR /home/appuser/app
 
 # Install Python dependencies from requirements.txt
 COPY --chown=appuser:appuser requirements.txt .
 
 # Create a virtual environment
-# Creates /home/appuser/app/venv (comment now on its own line)
 RUN python3.11 -m venv venv
 
-# Update PATH accordingly (comment moved to separate line for clarity)
-ENV PATH="/home/appuser/app/venv/bin:$PATH" 
+# Update PATH accordingly
+ENV PATH="/home/appuser/app/venv/bin:$PATH"
 
 # Install dependencies into the virtual environment
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy your Python application script into the container (this was after ENV PATH, so it's correct)
+# Copy your Python application script into the container
 COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
 
 # --- TEMPORARY ENTRYPOINT FOR FILE INSPECTION AFTER SCRIPT RUN ---
