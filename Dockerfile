@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     lsb-release \
     libgconf-2-4 \
     xvfb \
-    && rm -rf /var/lib/apt/lists/* \ # <-- REMOVE THE BACKSLASH '\' FROM THIS LINE
+    && rm -rf /var/lib/apt/lists/* 
     && apt-get clean
 
 # Pin Chrome and Chromedriver to a specific version for stability.
