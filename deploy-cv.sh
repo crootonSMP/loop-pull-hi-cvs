@@ -3,7 +3,7 @@
 set -e  # Exit on error
 
 # Define common variables
-JOB_TAG="v01-03"
+JOB_TAG="v01-13"
 JOB_NAME="daily-hire-screenshot-job-${JOB_TAG}"
 IMAGE_NAME="europe-west2-docker.pkg.dev/intelligent-recruitment-engine/recruitment-engine-repo/${JOB_NAME}:${JOB_TAG}"
 REGION="europe-west2"
