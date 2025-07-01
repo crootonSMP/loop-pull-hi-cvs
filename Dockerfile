@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11 \
     python3-pip \
     python3.11-venv \
-    build-essential \ # This is a package name, not a command. It should be fine.
+    build-essential \
     curl \
     unzip \
     wget \
