@@ -15,6 +15,4 @@ sqlalchemy==2.0.30
 cloud-sql-python-connector[pg8000]
 
 # Web Automation
-selenium==4.22.0 # Added for browser automation
-# webdriver-manager is not strictly needed if chromedriver is installed directly in Dockerfile
-# webdriver-manager==4.0.1
+selenium==4.22.0
