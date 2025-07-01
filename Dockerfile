@@ -79,11 +79,11 @@ COPY --chown=appuser:appuser requirements.txt .
 # Create a virtual environment and activate it
 # Create venv within the appuser's home directory (or current WORKDIR)
 RUN python3.11 -m venv venv # Creates /home/appuser/app/venv
-ENV PATH="/home/appuser/app/venv/bin:$PATH" # Update PATH accordingly
+# Update PATH accordingly (comment moved to separate line for clarity)
+ENV PATH="/home/appuser/app/venv/bin:$PATH" 
 
 # Install dependencies into the virtual environment
 RUN pip install --no-cache-dir -r requirements.txt
-
 # --- TEMPORARY ENTRYPOINT FOR FILE INSPECTION AFTER SCRIPT RUN ---
 # This will run your Python script, then list/cat temporary files, then exit.
 ENTRYPOINT ["/bin/bash", "-c", "\
