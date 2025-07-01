@@ -8,20 +8,44 @@ ENV TZ=Europe/London
 # Install Python 3.11, pip, and essential build tools
 # Also include all system packages for Chrome headless
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.11 python3-pip \
-    build-essential \ # Needed if python packages require compilation (e.g., cryptography, pandas native parts)
-    curl unzip wget gnupg ca-certificates fonts-liberation \
-    libappindicator3-1 libasound2 libatk-bridge2.0-0 libatk1.0-0 \
-    libcairo2 libcups2 libdbus-1-3 libdrm2 libgbm1 libgdk-pixbuf2.0-0 \
-    libglib2.0-0 libnspr4 libnss3 libxcomposite1 libxdamage1 libxext6 \
-    libxfixes3 libxrandr2 libxrender1 libxshmfence1 libxkbcommon0 xdg-utils \
+    python3.11 \
+    python3-pip \
+    build-essential \
+    curl \
+    unzip \
+    wget \
+    gnupg \
+    ca-certificates \
+    fonts-liberation \
+    libappindicator3-1 \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcairo2 \
+    libcups2 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgbm1 \
+    libgdk-pixbuf2.0-0 \
+    libglib2.0-0 \
+    libnspr4 \
+    libnss3 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxrandr2 \
+    libxrender1 \
+    libxshmfence1 \
+    libxkbcommon0 \
+    xdg-utils \
     fontconfig \
     dbus-x11 \
     lsb-release \
     libgconf-2-4 \
     xvfb \
-    && rm -rf /var/lib/apt/lists/* && \
-    apt-get clean
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 # Set python3.11 as default python
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
