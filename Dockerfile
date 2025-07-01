@@ -1,14 +1,15 @@
-# Use a slim Python base image for smaller size
-FROM python:3.11-slim-bookworm
+# Use a fuller Debian base image
+FROM debian:bookworm
 
-# Set environment variables for non-interactive installs and timezone
+# Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/London
 
-# Install essential system packages for Chrome headless
-# This list includes dependencies identified through debugging.
-# `apt-get clean` reduces image size by clearing package caches.
+# Install Python 3.11, pip, and essential build tools
+# Also include all system packages for Chrome headless
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 python3-pip \
+    build-essential \ # Needed if python packages require compilation (e.g., cryptography, pandas native parts)
     curl unzip wget gnupg ca-certificates fonts-liberation \
     libappindicator3-1 libasound2 libatk-bridge2.0-0 libatk1.0-0 \
     libcairo2 libcups2 libdbus-1-3 libdrm2 libgbm1 libgdk-pixbuf2.0-0 \
@@ -22,13 +23,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
+# Set python3.11 as default python
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
 # Pin Chrome and Chromedriver to a specific version for stability.
-# This ensures perfect compatibility between the browser and its driver.
 ENV CHROME_VERSION=125.0.6422.141
 
 # Install Chrome binary from Chrome for Testing
-# Unzips, moves the 'chrome-linux64' directory, renames it to 'chrome' inside /opt,
-# then creates a symlink to make it accessible via a standard path.
 RUN wget -q https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chrome-linux64.zip && \
     unzip chrome-linux64.zip && \
     mv chrome-linux64 /opt/chrome && \
@@ -36,8 +37,6 @@ RUN wget -q https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VE
     ln -s /opt/chrome/chrome /usr/bin/google-chrome
 
 # Install Chromedriver binary from Chrome for Testing
-# Unzips, moves the 'chromedriver' executable directly to /usr/bin/,
-# sets execute permissions, and cleans up temporary files/directories.
 RUN wget -q https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chromedriver-linux64.zip && \
     unzip chromedriver-linux64.zip && \
     mv chromedriver-linux64/chromedriver /usr/bin/chromedriver && \
@@ -50,7 +49,6 @@ WORKDIR /home/appuser/app
 USER appuser
 
 # Install Python dependencies from requirements.txt
-# `--no-cache-dir` reduces the final image size.
 COPY --chown=appuser:appuser requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -61,8 +59,15 @@ COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
 # This will run your Python script, then list/cat temporary files, then exit.
 ENTRYPOINT ["/bin/bash", "-c", "\
   echo '--- Running Python script ---' >&2; \
+  Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset & \
+  XVFB_PID=$!; \
+  sleep 3; # Give Xvfb time to start \
+  echo '--- Xvfb started with PID '$XVFB_PID' ---' >&2; \
   python hi_candidate_screenshot_job.py 2>&1 | tee /dev/stderr; \
   SCRIPT_EXIT_CODE=$?; \
+  \
+  kill $XVFB_PID || true; \
+  echo '--- Xvfb process killed ---' >&2; \
   \
   echo '--- Listing files in current directory (/home/appuser/app) ---' >&2; \
   ls -lh /home/appuser/app >&2; \
