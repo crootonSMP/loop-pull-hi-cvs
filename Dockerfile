@@ -12,19 +12,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxfixes3 libxrandr2 libxrender1 libxshmfence1 libxkbcommon0 xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Chrome 125 and matching Chromedriver
+# Install Chrome and Chromedriver (version 125)
 ENV CHROME_VERSION=125.0.6422.141
-RUN mkdir -p /opt/chrome && \
-    wget -q https://storage.googleapis.com/chrome-for-testing-public/$CHROME_VERSION/linux64/chrome-linux64.zip && \
-    unzip chrome-linux64.zip -d /opt/chrome && \
-    rm chrome-linux64.zip && \
-    ln -s /opt/chrome/chrome-linux64/chrome /usr/bin/google-chrome
 
-RUN mkdir -p /opt/chromedriver && \
-    wget -q https://storage.googleapis.com/chrome-for-testing-public/$CHROME_VERSION/linux64/chromedriver-linux64.zip && \
-    unzip chromedriver-linux64.zip -d /opt/chromedriver && \
-    rm chromedriver-linux64.zip && \
-    ln -s /opt/chromedriver/chromedriver-linux64/chromedriver /usr/bin/chromedriver
+# Install Chrome
+RUN wget -q https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chrome-linux64.zip && \
+    unzip chrome-linux64.zip && \
+    mv chrome-linux64 /opt/chrome && \
+    rm chrome-linux64.zip && \
+    ln -s /opt/chrome/chrome /usr/bin/google-chrome
+
+# Install Chromedriver
+RUN wget -q https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chromedriver-linux64.zip && \
+    unzip chromedriver-linux64.zip && \
+    mv chromedriver-linux64/chromedriver /usr/bin/chromedriver && \
+    chmod +x /usr/bin/chromedriver && \
+    rm -rf chromedriver-linux64.zip chromedriver-linux64
+
 
 # Add non-root user
 RUN useradd --create-home appuser
