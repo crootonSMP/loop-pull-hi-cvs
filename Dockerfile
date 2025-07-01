@@ -97,7 +97,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy your Python application script into the container
 COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
 
-# --- TEMPORARY ENTRYPOINT FOR EXTREME EARLY DEBUGGING (Python focus) ---
+# ... (rest of your Dockerfile) ...
+
+# --- TEMPORARY ENTRYPOINT FOR EXTREME EARLY DEBUGGING (Xvfb focus) ---
 ENTRYPOINT ["/bin/bash", "-c", "\
   echo '--- ENTRYPOINT START ---' >&2; \
   echo '--- Verifying Python availability ---' >&2; \
@@ -106,14 +108,21 @@ ENTRYPOINT ["/bin/bash", "-c", "\
   python --version >&2; \
   \
   echo '--- Starting Xvfb ---' >&2; \
-  Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset & \
+  # Start Xvfb, check its exit code after sleep, then proceed if successful \
+  (Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset &) \
   XVFB_PID=$!; \
   sleep 3; # Give Xvfb time to start \
+  \
+  # Check if Xvfb process is still running after sleep \
+  if ! kill -0 $XVFB_PID > /dev/null 2>&1; then \
+    echo '--- ERROR: Xvfb process '$XVFB_PID' died immediately! ---' >&2; \
+    # Capture any logs Xvfb might have written if it crashed \
+    cat /tmp/Xvfb_error_log.txt >&2 || true; \
+    exit 1; \
+  fi; \
   echo '--- Xvfb started with PID '$XVFB_PID' ---' >&2; \
   \
   echo '--- Running Python script (full output redirected) ---' >&2; \
-  # Execute Python script and send all its output to stderr immediately \
-  # Use 'bash -x' for extreme verbosity if this still yields no Python output.
   python hi_candidate_screenshot_job.py > /tmp/python_output.log 2>&1; \
   SCRIPT_EXIT_CODE=$?; \
   echo '--- Python script finished with exit code: '$SCRIPT_EXIT_CODE' ---' >&2; \
