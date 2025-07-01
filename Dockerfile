@@ -1,32 +1,50 @@
-# Use Selenium’s Chrome base image with built-in Chrome, Chromedriver, and Xvfb
-FROM selenium/standalone-chrome:124.0
+# Use a pre-built Selenium image with Chrome
+FROM selenium/standalone-chrome:latest 
 
-# Set timezone
+# Set timezone (if different from default in Selenium image)
 ENV TZ=Europe/London
 
-# Use root temporarily to install pip and packages
-USER root
-
-# Install pip
-RUN apt-get update && apt-get install -y python3-pip
-
-# Copy and install Python dependencies system-wide
-COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
-
-# Switch back to non-root user
+# Switch to the default user provided by the Selenium image (usually 'seluser')
+# The selenium/standalone-chrome image typically runs as 'seluser' by default.
 USER seluser
+# The typical home directory for 'seluser' in Selenium images
 WORKDIR /home/seluser
 
-# Copy Python script (as seluser)
+# Install common utilities (as a last resort for very obscure missing dependencies)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    procps \
+    iputils-ping \
+    net-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies from requirements.txt
+# We'll create a virtual environment for your dependencies.
+# Use 'python3' as the executable name, as that's typical in these images.
+RUN python3 -m venv venv && \
+    /usr/bin/python3 -m pip install --upgrade pip --break-system-packages
+
+# Add the virtual environment's bin directory to the PATH
+ENV PATH="/home/seluser/venv/bin:$PATH"
+
+# Copy your requirements.txt file into the container
+COPY --chown=seluser:seluser requirements.txt .
+
+# Install Python dependencies into the virtual environment
+# The --break-system-packages is crucial for newer Debian/Ubuntu base images
+# which prevent direct system-wide pip installs.
+RUN pip install --no-cache-dir -r requirements.txt --break-system-packages
+
+# Copy your Python application script into the container
 COPY --chown=seluser:seluser hi_candidate_screenshot_job.py .
 
-# Entrypoint to run the script inside the preconfigured display environment
+# --- Simplified ENTRYPOINT for pre-built image ---
+# The Selenium image handles Xvfb/display and Chrome/Chromedriver setup internally.
+# We just run your Python script.
 ENTRYPOINT ["/bin/bash", "-c", "\
-  echo '--- Running Python script (system install) ---' >&2; \
-  export DISPLAY=:99; \
-  python3 hi_candidate_screenshot_job.py 2>&1; \
+  echo '--- Running Python script (from Selenium base image) ---' >&2; \
+  python hi_candidate_screenshot_job.py 2>&1; \
   SCRIPT_EXIT_CODE=$?; \
+  \
   echo '--- Python script finished with exit code: '$SCRIPT_EXIT_CODE' ---' >&2; \
   exit $SCRIPT_EXIT_CODE; \
 "]
