@@ -67,17 +67,19 @@ RUN wget -q https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VE
     chmod +x /usr/bin/chromedriver && \
     rm -rf chromedriver-linux64.zip chromedriver-linux64
 
+
 # Create a non-root user for improved security
 RUN useradd --create-home appuser
 WORKDIR /home/appuser/app
-USER appuser
+USER appuser # <--- IMPORTANT: Switch to appuser before creating venv if appuser will own it
 
 # Install Python dependencies from requirements.txt
 COPY --chown=appuser:appuser requirements.txt .
 
 # Create a virtual environment and activate it
-RUN python3.11 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+# Create venv within the appuser's home directory (or current WORKDIR)
+RUN python3.11 -m venv venv # Creates /home/appuser/app/venv
+ENV PATH="/home/appuser/app/venv/bin:$PATH" # Update PATH accordingly
 
 # Install dependencies into the virtual environment
 RUN pip install --no-cache-dir -r requirements.txt
