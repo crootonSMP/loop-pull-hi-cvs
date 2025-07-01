@@ -15,13 +15,15 @@ os.environ.setdefault("DEBUG_SCREENSHOT_BUCKET", "recruitment-engine-cvs-sp-2606
 
 def init_driver():
     chrome_options = Options()
-    chrome_options.add_argument('--headless')
+    chrome_options.add_argument('--headless=new')  # Use the new headless mode
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
+    chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--window-size=1920,1080')
-    print("[DEBUG] Initializing headless Chrome WebDriver...")
-    return webdriver.Chrome(options=chrome_options)
+    chrome_options.add_argument('--remote-debugging-port=9222')  # Optional for debugging
 
+    print("[DEBUG] Initializing headless Chrome WebDriver...")
+    return webdriver.Chrome(executable_path='/usr/bin/chromedriver/chromedriver', options=chrome_options)
 
 def take_debug_screenshot(driver, step_name):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
