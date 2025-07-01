@@ -1,5 +1,5 @@
 # Use a pre-built Selenium image with Chrome
-FROM selenium/standalone-chrome:4.19.1
+FROM selenium/standalone-chrome:latest 
 
 # Set timezone (if different from default in Selenium image)
 ENV TZ=Europe/London
@@ -15,10 +15,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     net-tools \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python 3.x and pip if not already present/updated on the base image.
-# The selenium/standalone-chrome image typically has Python 3 installed, but this ensures pip is updated.
-# apt-get update is already done above, so we only need apt-get install here.
-RUN apt-get install -y python3-pip && rm -rf /var/lib/apt/lists/*
+# The selenium/standalone-chrome image typically has Python 3 with pip pre-installed.
+# Removed: RUN apt-get install -y python3-pip && rm -rf /var/lib/apt/lists/*
 
 # Switch back to the default non-root user for security
 USER seluser
