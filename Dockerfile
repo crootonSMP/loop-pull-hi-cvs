@@ -110,6 +110,36 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy your Python application script into the container
 COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
 
-# --- TEMPORARY ENTRYPOINT FOR EXTREME EARLY DEBUGGING (Simplified to avoid parsing issues) ---
-# This will run your Python script, then list/cat temporary files, then exit.
-ENTRYPOINT ["/bin/bash", "-c", "echo '--- ENTRYPOINT START ---' >&2; echo '--- Verifying Python availability ---' >&2; which python >&2; which python3.11 >&2; python --version >&2; echo '--- Starting Xvfb ---' >&2; Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset & XVFB_PID=$!; sleep 3; if ! kill -0 $XVFB_PID > /dev/null 2>&1; then echo '--- ERROR: Xvfb process '$XVFB_PID' died immediately! ---' >&2; cat /tmp/Xvfb_error_log.txt >&2 || true; exit 1; fi; echo '--- Xvfb started with PID '$XVFB_PID' ---' >&2; echo '--- Running Python script (full output redirected) ---' >&2; python hi_candidate_screenshot_job.py > /tmp/python_output.log 2>&1; SCRIPT_EXIT_CODE=$?; echo '--- Python script finished with exit code: '$SCRIPT_EXIT_CODE' ---' >&2; cat /tmp/python_output.log >&2; echo '--- End Python script output ---' >&2; kill $XVFB_PID || true; echo '--- Xvfb process killed ---' >&2; echo '--- Listing files in current directory (/home/appuser/app) ---' >&2; ls -lh /home/appuser/app >&2; echo '--- Attempting to print contents of any PNG files (WARNING: binary output) ---' >&2; for f in /home/appuser/app/*.png; do if [ -f \"$f\" ]; then echo \"--- Contents of $f ---\" >&2; cat \"$f\" >&2; echo \"--- End contents of $f ---\" >&2; fi; done; echo '--- CHROME DEBUG LOG from Python run (if any) ---' >&2; if [ -f /tmp/chrome_debug_python.log ]; then cat /tmp/chrome_debug_python.log >&2; else echo 'No /tmp/chrome_debug_python.log found.' >&2; fi; echo '--- END CHROME DEBUG LOG ---' >&2; echo '--- Container exiting with final code: '$SCRIPT_EXIT_CODE' ---' >&2; exit $SCRIPT_EXIT_CODE; "]
+# Copy your Python application script into the container
+COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
+
+# --- PRODUCTION-READY ENTRYPOINT (with Xvfb and direct Python output) ---
+ENTRYPOINT ["/bin/bash", "-c", "\
+  echo '--- ENTRYPOINT START ---' >&2; \
+  \
+  # Start Xvfb in the background and ensure it's running \
+  echo '--- Starting Xvfb ---' >&2; \
+  Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset & \
+  XVFB_PID=$!; \
+  sleep 3; # Give Xvfb time to start \
+  \
+  # Check if Xvfb process is still alive. If not, exit with error. \
+  if ! kill -0 $XVFB_PID > /dev/null 2>&1; then \
+    echo '--- ERROR: Xvfb process '$XVFB_PID' died immediately! ---' >&2; \
+    # We might not have Xvfb_error_log.txt if it crashes that fast \
+    exit 1; \
+  fi; \
+  echo '--- Xvfb started with PID '$XVFB_PID' ---' >&2; \
+  \
+  # Run the Python script and direct all its output (stdout+stderr) to /dev/stderr \
+  echo '--- Running Python script ---' >&2; \
+  python hi_candidate_screenshot_job.py 2>&1; \
+  SCRIPT_EXIT_CODE=$?; \
+  \
+  # Clean up Xvfb process \
+  kill $XVFB_PID || true; \
+  echo '--- Xvfb process killed ---' >&2; \
+  \
+  echo '--- Container exiting with code: '$SCRIPT_EXIT_CODE' ---' >&2; \
+  exit $SCRIPT_EXIT_CODE; \
+"]
