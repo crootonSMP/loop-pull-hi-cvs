@@ -113,25 +113,38 @@ COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
 # Copy your Python application script into the container
 COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
 
-# --- PRODUCTION-READY ENTRYPOINT (with Xvfb and direct Python output) ---
+# ... (rest of your Dockerfile remains identical) ...
+
+# --- FINAL ATTEMPT ENTRYPOINT FOR STABLE XVFB AND PYTHON ---
 ENTRYPOINT ["/bin/bash", "-c", "\
   echo '--- ENTRYPOINT START ---' >&2; \
   \
-  # Start Xvfb in the background and ensure it's running \
-  echo '--- Starting Xvfb ---' >&2; \
-  Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset & \
+  # Start Xvfb in the background, redirect its output to a log file \
+  echo '--- Starting Xvfb and capturing its output to /tmp/Xvfb.log ---' >&2; \
+  Xvfb :99 -screen 0 1920x1080x24 -ac +extension GLX +render -noreset > /tmp/Xvfb.log 2>&1 & \
   XVFB_PID=$!; \
-  sleep 3; # Give Xvfb time to start \
   \
-  # Check if Xvfb process is still alive. If not, exit with error. \
+  # Give Xvfb time to initialize and check if it's running \
+  ATTEMPTS=0; \
+  while [ $ATTEMPTS -lt 10 ]; do \
+    if kill -0 $XVFB_PID > /dev/null 2>&1; then \
+      echo '--- Xvfb started successfully with PID '$XVFB_PID' ---' >&2; \
+      break; \
+    else \
+      echo '--- Waiting for Xvfb to start... (attempt '$ATTEMPTS') ---' >&2; \
+      sleep 1; \
+      ATTEMPTS=$((ATTEMPTS+1)); \
+    fi; \
+  done; \
+  \
+  # If Xvfb is still not running after attempts, exit with error \
   if ! kill -0 $XVFB_PID > /dev/null 2>&1; then \
-    echo '--- ERROR: Xvfb process '$XVFB_PID' died immediately! ---' >&2; \
-    # We might not have Xvfb_error_log.txt if it crashes that fast \
+    echo '--- ERROR: Xvfb did not start! Check /tmp/Xvfb.log below. ---' >&2; \
+    cat /tmp/Xvfb.log >&2; \
     exit 1; \
   fi; \
-  echo '--- Xvfb started with PID '$XVFB_PID' ---' >&2; \
   \
-  # Run the Python script and direct all its output (stdout+stderr) to /dev/stderr \
+  # Run the Python script \
   echo '--- Running Python script ---' >&2; \
   python hi_candidate_screenshot_job.py 2>&1; \
   SCRIPT_EXIT_CODE=$?; \
@@ -140,6 +153,7 @@ ENTRYPOINT ["/bin/bash", "-c", "\
   kill $XVFB_PID || true; \
   echo '--- Xvfb process killed ---' >&2; \
   \
+  # Display final logs (adjust based on python script's output) \
   echo '--- Container exiting with code: '$SCRIPT_EXIT_CODE' ---' >&2; \
   exit $SCRIPT_EXIT_CODE; \
 "]
