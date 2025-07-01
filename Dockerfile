@@ -58,9 +58,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy your Python application script into the container
 COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
 
-# --- TEMPORARY ENTRYPOINT FOR DEEP DEBUGGING (More Aggressive Output) ---
-# This will try to launch Chrome manually first and print its output directly to stderr,
-# then run your Python script.
+# ... (rest of your Dockerfile remains the same) ...
+
+# --- TEMPORARY ENTRYPOINT FOR DEEP DEBUGGING ---
 ENTRYPOINT ["/bin/bash", "-c", "\
   echo '--- Attempting Chrome manual launch (Direct to STDERR) ---' >&2; \
   /opt/chrome/chrome --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --dump-dom 'about:blank' 2>&1; \
@@ -69,6 +69,10 @@ ENTRYPOINT ["/bin/bash", "-c", "\
   \
   echo '--- Attempting Python script launch ---' >&2; \
   python hi_candidate_screenshot_job.py 2>&1 | tee /dev/stderr; \
-  # Removed chrome_debug.log cat for now, focusing on manual launch output \
+  if [ -f /tmp/chrome_debug_python.log ]; then \
+    echo '--- CHROME DEBUG LOG from Python run ---' >&2; \
+    cat /tmp/chrome_debug_python.log >&2; \
+    echo '--- END CHROME DEBUG LOG ---' >&2; \
+  fi \
 "]
 # --- END TEMPORARY ENTRYPOINT ---
