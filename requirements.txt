@@ -1,8 +1,7 @@
-# Selenium for browser automation
-selenium==4.20.0
-
-# Google Cloud Storage client
 google-cloud-storage==2.16.0
-
-# Google auth (optional, but often useful)
+google-cloud-secret-manager==2.19.0
 google-auth==2.29.0
+pandas==2.2.2
+openpyxl==3.1.2
+requests==2.32.3
+selenium==4.20.0
