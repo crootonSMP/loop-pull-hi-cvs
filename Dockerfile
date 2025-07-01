@@ -1,4 +1,4 @@
-FROM node:20-slim # Or a specific Node.js version you prefer
+FROM node:20-slim
 
 WORKDIR /usr/src/app
 
