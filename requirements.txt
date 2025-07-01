@@ -5,16 +5,15 @@ google-cloud-storage==2.16.0
 google-cloud-secret-manager==2.19.0
 google-auth==2.29.0
 
-# Data Manipulation (kept as per original, though not strictly used in new script)
+# Data Manipulation
 pandas==2.2.2
-openpyxl==3.1.2
-
-# HTTP Requests (kept as per original)
+openpyxl==3.1.2 # Keep if needed for other parts, otherwise remove
 requests==2.32.3
 
-# Database dependencies for Cloud SQL integration (kept as per original)
+# Database dependencies for Cloud SQL integration
 sqlalchemy==2.0.30
 cloud-sql-python-connector[pg8000]
 
 # Web Automation
-selenium==4.22.0
+selenium==4.22.0 # Added for browser automation
+# webdriver-manager is not strictly needed if chromedriver is installed directly in Dockerfile
