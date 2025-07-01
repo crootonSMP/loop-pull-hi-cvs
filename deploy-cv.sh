@@ -34,15 +34,13 @@ docker build -t "${IMAGE_NAME}" . || exit 1
 echo "Step 3: Pushing Docker image: ${IMAGE_NAME}"
 docker push "${IMAGE_NAME}" || exit 1
 
-# Step 4: Create/Update Cloud Run Job
-echo "Step 4: Deploying Cloud Run Job: ${JOB_NAME}"
 gcloud run jobs deploy "${JOB_NAME}" \
   --region="${REGION}" \
   --memory="${MEMORY}" \
   --cpu="${CPU}" \
   --image="${IMAGE_NAME}" \
   --task-timeout="${TASK_TIMEOUT}" \
-  --set-env-vars="DB_CONNECTION_NAME=${DB_CONNECTION_INSTANCE},HIRE_USERNAME=crootonmaster@applygateway.com,DEBUG_SCREENSHOT_BUCKET=recruitment-engine-cvs-sp-260625,SE_SHM_SIZE=2G" \ # <-- FIX: ADDED SE_SHM_SIZE HERE
+  --set-env-vars="DB_CONNECTION_NAME=${DB_CONNECTION_INSTANCE},HIRE_USERNAME=crootonmaster@applygateway.com,DEBUG_SCREENSHOT_BUCKET=recruitment-engine-cvs-sp-260625,SE_SHM_SIZE=2G" \
   --set-secrets="HIRE_PASSWORD=hire-password:latest,DB_USER=db-user:latest,DB_PASSWORD=db-password:latest,DB_NAME=db-name:latest" \
   --set-cloudsql-instances="${DB_CONNECTION_INSTANCE}" \
   --service-account="screenshot-runner@intelligent-recruitment-engine.iam.gserviceaccount.com" \
