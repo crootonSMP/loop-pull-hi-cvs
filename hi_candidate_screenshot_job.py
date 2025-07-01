@@ -1,30 +1,22 @@
-import os
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-
-print("[DEBUG] Python script starting (absolute bare minimum).")
-
-try:
+# --- Initializes the Selenium WebDriver ---
+def init_driver():
     chrome_options = Options()
+    # No --headless=new (Selenium image handles display)
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
-    chrome_options.add_argument('--disable-gpu')
+    chrome_options.add_argument('--disable-gpu') # Good practice for headless
     chrome_options.add_argument('--window-size=1920,1080')
+    chrome_options.add_argument('--remote-debugging-port=9222')
+    chrome_options.add_argument('--verbose')
+    chrome_options.add_argument('--log-path=/tmp/chrome_debug_python.log') # Chrome's own logs
 
-    # No binary_location or explicit Service path needed for selenium/standalone-chrome
-    service = Service() 
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    # --- CRITICAL CHANGES FOR selenium/standalone-chrome BASE IMAGE ---
+    # REMOVE binary_location - Selenium image manages Chrome's path
+    # chrome_options.binary_location = "/opt/chrome/chrome"
 
-    print("[DEBUG] WebDriver initialized successfully (bare minimum test).")
-    driver.get("about:blank")
-    print("[DEBUG] Navigated to about:blank (bare minimum test).")
-    driver.quit()
-    print("[DEBUG] Browser closed (bare minimum test).")
+    print("[DEBUG] Initializing headless Chrome WebDriver...")
+    
+    # Use Service() without explicit path, and add verbose ChromeDriver logging
+    service = Service(log_path="/tmp/chromedriver_debug.log", verbose=True) 
 
-except Exception as e:
-    print(f"[ERROR] Bare minimum WebDriver test failed: {e}")
-    import traceback
-    traceback.print_exc()
-
-print("[DEBUG] Python script finished (absolute bare minimum).")
+    return webdriver.Chrome(service=service, options=chrome_options)
