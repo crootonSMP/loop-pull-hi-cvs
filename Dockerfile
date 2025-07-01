@@ -1,31 +1,30 @@
-# Use Selenium base image with Chrome and Python preinstalled
+# Use Selenium base image with Chrome
 FROM selenium/standalone-chrome:latest
 
 # Set timezone
 ENV TZ=Europe/London
 
-# Switch to default non-root user
-USER seluser
+# Switch to root to install packages
+USER root
 WORKDIR /home/seluser
 
-# Create and activate a virtual environment, upgrade pip
-RUN python3 -m venv venv && \
-    /usr/bin/python3 -m pip install --upgrade pip --break-system-packages
+# Upgrade pip globally (no venv)
+RUN pip install --upgrade pip
 
-# Add virtualenv to PATH
-ENV PATH="/home/seluser/venv/bin:$PATH"
+# Install Python dependencies from requirements.txt
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy requirements and install dependencies
-COPY --chown=seluser:seluser requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt --break-system-packages
+# Copy your script
+COPY hi_candidate_screenshot_job.py .
 
-# Copy your Python script
-COPY --chown=seluser:seluser hi_candidate_screenshot_job.py .
+# Switch back to seluser
+USER seluser
 
-# Fix ENTRYPOINT typo and launch Python
+# Run your script
 ENTRYPOINT ["/bin/bash", "-c", "\
   echo '--- Running Python script (from Selenium base image) ---' >&2; \
-  python hi_candidate_screenshot_job.py 2>&1; \
+  python3 hi_candidate_screenshot_job.py 2>&1; \
   SCRIPT_EXIT_CODE=$?; \
   echo '--- Python script finished with exit code: '$SCRIPT_EXIT_CODE' ---' >&2; \
   exit $SCRIPT_EXIT_CODE; \
