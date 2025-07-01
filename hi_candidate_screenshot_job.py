@@ -26,11 +26,15 @@ def init_driver():
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--window-size=1920,1080')
     chrome_options.add_argument('--remote-debugging-port=9222')
+    # Add any other arguments you wish, like:
+    # chrome_options.add_argument('--disable-extensions')
+    # chrome_options.add_argument('--disable-features=NetworkService')
+    # chrome_options.add_argument('--single-process')
 
     print("[DEBUG] Initializing headless Chrome WebDriver...")
     
-    # ✅ Fixed path
-    service = Service("/usr/bin/chromedriver")
+    # THIS IS THE CRUCIAL LINE: Ensure it points directly to /usr/bin/chromedriver
+    service = Service("/usr/bin/chromedriver") 
 
     return webdriver.Chrome(service=service, options=chrome_options)
 
