@@ -6,6 +6,8 @@ COPY package.json ./
 
 RUN npm install
 
+# ... (lines before your apt-get install block) ...
+
 # Install missing shared libraries for Chrome and other common dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
@@ -33,8 +35,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     zlib1g-dev \
     libffi-dev \
+    libxkbcommon0 \ # <--- ADD THIS LINE
     && rm -rf /var/lib/apt/lists/*
-# Copy your application code
+# ... (rest of your Dockerfile) ...
 COPY . .
 
 # Run the script
