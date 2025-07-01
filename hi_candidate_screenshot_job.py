@@ -14,6 +14,10 @@ from google.cloud import storage
 # Set default bucket if not set via env
 os.environ.setdefault("DEBUG_SCREENSHOT_BUCKET", "recruitment-engine-cvs-sp-260625")
 
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium import webdriver
+
 def init_driver():
     chrome_options = Options()
     chrome_options.add_argument('--headless=new')
@@ -24,9 +28,11 @@ def init_driver():
     chrome_options.add_argument('--remote-debugging-port=9222')
 
     print("[DEBUG] Initializing headless Chrome WebDriver...")
-    service = Service("/usr/bin/chromedriver/chromedriver")
-    return webdriver.Chrome(service=service, options=chrome_options)
+    
+    # ✅ Fixed path
+    service = Service("/usr/bin/chromedriver")
 
+    return webdriver.Chrome(service=service, options=chrome_options)
 
 def take_debug_screenshot(driver, step_name):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
