@@ -60,19 +60,20 @@ COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
 
 # ... (rest of your Dockerfile remains the same) ...
 
-# --- TEMPORARY ENTRYPOINT FOR DEEP DEBUGGING ---
+# ... (rest of your Dockerfile remains the same as the "full working docker" you provided) ...
+
+# --- TEMPORARY ENTRYPOINT FOR MAX CHROME DEBUGGING ---
+# This will ONLY attempt to launch Chrome manually and exit immediately after.
+# Its sole purpose is to capture ALL possible Chrome startup errors.
 ENTRYPOINT ["/bin/bash", "-c", "\
-  echo '--- Attempting Chrome manual launch (Direct to STDERR) ---' >&2; \
-  /opt/chrome/chrome --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --dump-dom 'about:blank' 2>&1; \
+  echo '--- CHROME STANDALONE LAUNCH START (Direct to STDERR) ---' >&2; \
+  # Execute Chrome, enabling verbose logging and redirecting all output to stderr \
+  /opt/chrome/chrome --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --dump-dom 'about:blank' --enable-logging --v=1 2>&1; \
   RET_CODE=$?; \
-  echo '--- Chrome manual launch exited with code: '$RET_CODE' (Direct to STDERR) ---' >&2; \
+  echo '--- CHROME STANDALONE LAUNCH EXIT CODE: '$RET_CODE' (Direct to STDERR) ---' >&2; \
+  echo '--- END CHROME STANDALONE LAUNCH OUTPUT (Direct to STDERR) ---' >&2; \
   \
-  echo '--- Attempting Python script launch ---' >&2; \
-  python hi_candidate_screenshot_job.py 2>&1 | tee /dev/stderr; \
-  if [ -f /tmp/chrome_debug_python.log ]; then \
-    echo '--- CHROME DEBUG LOG from Python run ---' >&2; \
-    cat /tmp/chrome_debug_python.log >&2; \
-    echo '--- END CHROME DEBUG LOG ---' >&2; \
-  fi \
+  # Exit immediately with Chrome's exit code to ensure logs are flushed \
+  exit $RET_CODE; \
 "]
 # --- END TEMPORARY ENTRYPOINT ---
