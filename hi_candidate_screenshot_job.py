@@ -37,19 +37,27 @@ def test_gcs_upload():
         return False
 
 # --- Initializes the Selenium WebDriver ---
+# --- Initializes the Selenium WebDriver ---
 def init_driver():
     chrome_options = Options()
+    # No --headless=new (Selenium image handles display)
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
-    chrome_options.add_argument('--disable-gpu')
+    chrome_options.add_argument('--disable-gpu') # Good practice for headless
     chrome_options.add_argument('--window-size=1920,1080')
     chrome_options.add_argument('--remote-debugging-port=9222')
     chrome_options.add_argument('--verbose')
     chrome_options.add_argument('--log-path=/tmp/chrome_debug_python.log')
-    chrome_options.binary_location = "/opt/chrome/chrome"
+    
+    # --- CHANGE HERE: REMOVE binary_location for pre-built images ---
+    # chrome_options.binary_location = "/opt/chrome/chrome" 
 
-    print("[DEBUG] Initializing headless Chrome WebDriver with Xvfb/DISPLAY...")
-    service = Service("/usr/bin/chromedriver")
+    print("[DEBUG] Initializing headless Chrome WebDriver...") # Removed Xvfb/DISPLAY from print
+    
+    # --- CHANGE HERE: Try without explicit executable_path for Service ---
+    # service = Service("/usr/bin/chromedriver") 
+    service = Service() # Let Selenium find chromedriver on PATH
+
     return webdriver.Chrome(service=service, options=chrome_options)
 
 # --- Takes a screenshot ---
