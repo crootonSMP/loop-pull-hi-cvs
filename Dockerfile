@@ -17,7 +17,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fontconfig \
     dbus-x11 \
     lsb-release \
-    xvfb \
+    libgconf-2-4 \  # <--- ADD THIS LINE
+    xvfb \          # <--- ENSURE THIS IS PRESENT
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
