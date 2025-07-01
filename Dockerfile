@@ -19,8 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     lsb-release \
     libgconf-2-4 \
     xvfb \
-    && rm -rf /var/lib/apt/lists/* \  # <--- ADD THE BACKSLASH '\' TO THIS LINE
-    && apt-get clean
+    && rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
 
 # Pin Chrome and Chromedriver to a specific version for stability.
 # This ensures perfect compatibility between the browser and its driver.
@@ -87,4 +87,3 @@ ENTRYPOINT ["/bin/bash", "-c", "\
   echo '--- Container exiting with script code ---' >&2; \
   exit $SCRIPT_EXIT_CODE; \
 "]
-# --- END TEMPORARY ENTRYPOINT ---
