@@ -4,7 +4,7 @@ set -e  # Exit on error
 
 # Define common variables for easier management and consistency
 JOB_TAG="latest"
-JOB_NAME="daily-hire-screenshot-job-v01-01" # Using the job name from your latest successful build output
+JOB_NAME="daily-hire-screenshot-job-v01-02" # Using the job name from your latest successful build output
 IMAGE_NAME="europe-west2-docker.pkg.dev/intelligent-recruitment-engine/recruitment-engine-repo/${JOB_NAME}:${JOB_TAG}"
 REGION="europe-west2"
 MEMORY="1Gi" # Adjust as needed based on browser memory usage
