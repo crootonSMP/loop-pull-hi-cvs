@@ -53,7 +53,7 @@ def run():
         driver = webdriver.Chrome(service=service, options=options)
         wait = WebDriverWait(driver, 20)
 
-        # Login Phase
+        # Login
         logging.info("🌐 Opening login page")
         driver.get("https://clients.hireintelligence.io/login")
 
@@ -61,26 +61,25 @@ def run():
         driver.find_element(By.ID, "password").send_keys(PASSWORD)
         wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Log In')]"))).click()
 
-        logging.info("🔐 Submitted login form, waiting for dashboard...")
+        logging.info("🔐 Login submitted, waiting for dashboard...")
         wait.until(EC.url_contains("dashboard"))
-        logging.info("✅ Dashboard page loaded")
-        capture(driver, "01_dashboard_logged_in")
+        
+        # Wait for dashboard to fully load — e.g., wait for "YOUR JOBS"
+        wait.until(EC.presence_of_element_located((By.XPATH, "//h4[contains(text(), 'YOUR JOBS')]")))
+        logging.info("✅ Dashboard fully loaded!")
+        capture(driver, "01_dashboard_loaded")
 
-        # Post-login delay for iframe loading
-        time.sleep(5)
+        time.sleep(2)  # Additional buffer to ensure stability
 
-        # Now go to the multi-candidate admin page
-        logging.info("➡️ Navigating to multi-candidate admin page...")
+        # Navigate to multi-candidate admin
+        logging.info("➡️ Navigating to multi-candidate admin...")
         driver.get("https://clients.hireintelligence.io/multi-candidate-admin")
         time.sleep(5)
-        logging.info("📄 Arrived at multi-candidate admin page")
         capture(driver, "02_multi_candidate_admin")
 
-        # Log iframe count for debug
-        iframes = driver.find_elements(By.TAG_NAME, "iframe")
-        logging.info(f"🧾 Found {len(iframes)} iframe(s)")
+        logging.info("📋 Navigation complete. You can now start scraping.")
 
-        # [NEXT: Add scraping logic here]
+        # [Optional: Add scraping logic here]
 
     except Exception as e:
         logging.error(f"❌ Script failed: {e}")
