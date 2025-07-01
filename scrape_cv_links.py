@@ -6,8 +6,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-EMAIL = os.environ["LOGIN_EMAIL"]
-PASSWORD = os.environ["LOGIN_PASSWORD"]
+EMAIL = os.environ["HIRE_USERNAME"]
+PASSWORD = os.environ["HIRE_PASSWORD"]
 
 options = Options()
 options.add_argument("--headless")
