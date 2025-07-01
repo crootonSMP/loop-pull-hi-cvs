@@ -1,45 +1,55 @@
-FROM node:20-slim
+# Use a pre-built Selenium image with Chrome
+FROM selenium/standalone-chrome:latest 
 
-WORKDIR /usr/src/app
-# Install Puppeteer and other Node.js dependencies
-COPY package.json ./
+# Set timezone (if different from default in Selenium image)
+ENV TZ=Europe/London
 
-RUN npm install
+# Switch to root to perform system-level installations
+# This is necessary as apt-get requires root privileges.
+USER root
 
-# ... (lines before 38) ...
-
-# Install missing shared libraries for Chrome and other common dependencies
+# Install common utilities (as a last resort for very obscure missing dependencies)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libglib2.0-0 \
-    libnss3 \
-    libnspr4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm-common \
-    libgbm1 \
-    libxshmfence1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxext6 \
-    libxfixes3 \
-    libxrandr2 \
-    libxrender1 \
-    libasound2 \
-    fonts-liberation \
-    fontconfig \
-    xdg-utils \
-    dbus-x11 \
-    lsb-release \
-    libgconf-2-4 \
-    libssl-dev \
-    zlib1g-dev \
-    libffi-dev \
-    libxkbcommon0 \ # <--- Ensure this line ends with a backslash '\'
+    procps \
+    iputils-ping \
+    net-tools \
     && rm -rf /var/lib/apt/lists/*
-# ... (rest of your Dockerfile content) ...
-# ... (rest of your Dockerfile) ...
-COPY . .
 
-# Run the script
-CMD ["node", "index.js"]
+# Install Python 3.x and pip if not already present/updated on the base image.
+# The selenium/standalone-chrome image typically has Python 3 installed, but this ensures pip is updated.
+# apt-get update is already done above, so we only need apt-get install here.
+RUN apt-get install -y python3-pip && rm -rf /var/lib/apt/lists/*
+
+# Switch back to the default non-root user for security
+USER seluser
+# The typical home directory for 'seluser' in Selenium images
+WORKDIR /home/seluser
+
+# Install Python dependencies into a virtual environment
+# Create virtual environment and upgrade pip within it, explicitly breaking system packages
+RUN python3 -m venv venv && \
+    venv/bin/python3 -m pip install --upgrade pip --break-system-packages
+
+# Add the virtual environment's bin directory to the PATH
+ENV PATH="/home/seluser/venv/bin:$PATH"
+
+# Copy your requirements.txt file into the container
+COPY --chown=seluser:seluser requirements.txt .
+
+# Install Python dependencies into the virtual environment
+RUN pip install --no-cache-dir -r requirements.txt --break-system-packages
+
+# Copy your Python application script into the container
+COPY --chown=seluser:seluser hi_candidate_screenshot_job.py .
+
+# --- Simplified ENTRYPOINT for pre-built image ---
+# The Selenium image handles Xvfb/display and Chrome/Chromedriver setup internally.
+# This ENTRYPOINT simply runs your Python script.
+ENTRYPOINT ["/bin/bash", "-c", "\
+  echo '--- Running Python script (from Selenium base image) ---' >&2; \
+  python hi_candidate_screenshot_job.py 2>&1; \
+  SCRIPT_EXIT_CODE=$?; \
+  \
+  echo '--- Python script finished with exit code: '$SCRIPT_EXIT_CODE' ---' >&2; \
+  exit $SCRIPT_EXIT_CODE; \
+"]
