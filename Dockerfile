@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fontconfig \
     dbus-x11 \
     lsb-release \
+    xvfb \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
