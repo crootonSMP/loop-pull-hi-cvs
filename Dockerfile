@@ -67,23 +67,30 @@ RUN wget -q https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VE
     chmod +x /usr/bin/chromedriver && \
     rm -rf chromedriver-linux64.zip chromedriver-linux64
 
-
 # Create a non-root user for improved security
 RUN useradd --create-home appuser
-WORKDIR /home/appuser/app
-USER appuser # <--- IMPORTANT: Switch to appuser before creating venv if appuser will own it
+
+# Switch to the non-root user before performing operations as that user
+USER appuser
+# Set WORKDIR after switching user if it's user's home
+WORKDIR /home/appuser/app 
 
 # Install Python dependencies from requirements.txt
 COPY --chown=appuser:appuser requirements.txt .
 
-# Create a virtual environment and activate it
-# Create venv within the appuser's home directory (or current WORKDIR)
-RUN python3.11 -m venv venv # Creates /home/appuser/app/venv
+# Create a virtual environment
+# Creates /home/appuser/app/venv (comment now on its own line)
+RUN python3.11 -m venv venv
+
 # Update PATH accordingly (comment moved to separate line for clarity)
 ENV PATH="/home/appuser/app/venv/bin:$PATH" 
 
 # Install dependencies into the virtual environment
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy your Python application script into the container (this was after ENV PATH, so it's correct)
+COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
+
 # --- TEMPORARY ENTRYPOINT FOR FILE INSPECTION AFTER SCRIPT RUN ---
 # This will run your Python script, then list/cat temporary files, then exit.
 ENTRYPOINT ["/bin/bash", "-c", "\
