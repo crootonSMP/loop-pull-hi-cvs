@@ -18,15 +18,24 @@ storage_client = storage.Client()
 def init_driver():
     chrome_options = Options()
     chrome_options.add_argument('--headless=new')
-    chrome_options.add_argument('--no-sandbox')
-    chrome_options.add_argument('--disable-dev-shm-usage')
-    chrome_options.add_argument('--disable-gpu')
+    chrome_options.add_argument('--no-sandbox') # Crucial for containers
+    chrome_options.add_argument('--disable-dev-shm-usage') # Prevents shared memory issues
+    chrome_options.add_argument('--disable-gpu') # Important for headless environments
     chrome_options.add_argument('--window-size=1920,1080')
-    chrome_options.add_argument('--enable-logging')
-    chrome_options.add_argument('--v=1')
-    chrome_options.add_argument('--log-path=/tmp/chrome_debug.log')
+    chrome_options.add_argument('--remote-debugging-port=9222')
+    # Optional but good to have
+    chrome_options.add_argument('--disable-extensions')
+    chrome_options.add_argument('--disable-setuid-sandbox') # Redundant with --no-sandbox, but belt-and-suspenders
+    chrome_options.add_argument('--disable-features=NetworkService') # Sometimes helps with network errors
 
-    service = Service("/usr/bin/chromedriver")
+    # Add verbose logging for the Python-launched Chrome session
+    chrome_options.add_argument('--verbose')
+    chrome_options.add_argument('--log-path=/tmp/chrome_debug_python.log') # Changed name to differentiate
+
+    print("[DEBUG] Initializing headless Chrome WebDriver...")
+    
+    service = Service("/usr/bin/chromedriver") 
+
     return webdriver.Chrome(service=service, options=chrome_options)
 
 def take_debug_screenshot(driver, name):
