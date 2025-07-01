@@ -10,6 +10,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 libcups2 libdbus-1-3 libdrm2 libgbm1 libgdk-pixbuf2.0-0 \
     libglib2.0-0 libnspr4 libnss3 libxcomposite1 libxdamage1 libxext6 \
     libxfixes3 libxrandr2 libxrender1 libxshmfence1 libxkbcommon0 xdg-utils \
+    fontconfig \
+    # --- NEW ADDITIONS FOR DEBUGGING/COMPATIBILITY ---
+    dbus-x11 \
+    lsb-release \
+    # --- END NEW ADDITIONS ---
     && rm -rf /var/lib/apt/lists/*
 
 # Install Chrome and Chromedriver (version 125)
@@ -29,7 +34,6 @@ RUN wget -q https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VE
     chmod +x /usr/bin/chromedriver && \
     rm -rf chromedriver-linux64.zip chromedriver-linux64
 
-
 # Add non-root user
 RUN useradd --create-home appuser
 WORKDIR /home/appuser/app
@@ -42,4 +46,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy script
 COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
 
-ENTRYPOINT ["python", "hi_candidate_screenshot_job.py"]
+# IMPORTANT: KEEP THE DEBUG ENTRYPOINT AND PYTHON VERBOSE LOGGING FOR NOW
+# ENTRYPOINT ["python", "hi_candidate_screenshot_job.py"]
+ENTRYPOINT ["/bin/bash", "-c", "python hi_candidate_screenshot_job.py 2>&1 | tee /dev/stderr; if [ -f /tmp/chrome_debug.log ]; then echo '--- CHROME DEBUG LOG ---'; cat /tmp/chrome_debug.log; echo '--- END CHROME DEBUG LOG ---'; fi"]
