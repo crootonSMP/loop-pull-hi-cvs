@@ -1,11 +1,10 @@
+
 # Use a fuller Debian base image
 FROM debian:bookworm
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/London
-
-# ... (lines before RUN apt-get update) ...
 
 # Install Python 3.11, pip, and essential build tools
 # Also include all system packages for Chrome headless
@@ -47,20 +46,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     lsb-release \
     libgconf-2-4 \
     xvfb \
-    # --- ADD THESE CORE LIBRARIES ---
     libssl-dev \
     zlib1g-dev \
     libffi-dev \
-    # --- END ADDITION ---
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# --- ADD THESE ENVIRONMENT VARIABLES FOR LOCALE ---
+# Set locale environment variables for Python
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
-# --- END ADDITION ---
-
-# ... (rest of your Dockerfile, including the ENTRYPOINT from last time) ...
 
 # Set python3.11 as default python
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
@@ -87,7 +81,7 @@ RUN mkdir -p /tmp/.X11-unix && \
     chmod 1777 /tmp/.X11-unix && \
     chown root:root /tmp/.X11-unix
 
-# Create a non-root user for improved security (This section is unique and correct)
+# Create a non-root user for improved security
 RUN useradd --create-home appuser
 
 # Switch to the non-root user before performing operations as that user
@@ -107,15 +101,11 @@ ENV PATH="/home/appuser/app/venv/bin:$PATH"
 # Install dependencies into the virtual environment
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy your Python application script into the container
+# Copy your Python application script into the container (duplicate removed)
 COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
 
-# Copy your Python application script into the container
-COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
-
-# ... (rest of your Dockerfile remains identical) ...
-
-# --- FINAL ATTEMPT ENTRYPOINT FOR STABLE XVFB AND PYTHON ---
+# --- TEMPORARY ENTRYPOINT FOR STABLE XVFB AND PYTHON ---
+# This will run your Python script, then list/cat temporary files, then exit.
 ENTRYPOINT ["/bin/bash", "-c", "\
   echo '--- ENTRYPOINT START ---' >&2; \
   \
