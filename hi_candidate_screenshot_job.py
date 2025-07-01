@@ -11,9 +11,47 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from google.cloud import storage
 
-# Define GCS bucket
+# Define GCS bucket (using os.getenv is good)
 BUCKET_NAME = os.getenv("DEBUG_SCREENSHOT_BUCKET", "recruitment-engine-cvs-sp-260625")
-storage_client = storage.Client()
+storage_client = storage.Client() # Global client is good
+
+# --- NEW FUNCTION FOR GCS TEST ---
+def test_gcs_upload():
+    test_filename = f"gcs_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    test_content = f"This is a test file uploaded from Cloud Run at {datetime.now().isoformat()}."
+    test_blob_name = f"debug_test/{test_filename}" # Use a slightly different path for test files
+
+    print(f"[DEBUG] Attempting to upload GCS test file: {test_blob_name}")
+    try:
+        bucket = storage_client.bucket(BUCKET_NAME)
+        blob = bucket.blob(test_blob_name)
+        blob.upload_from_string(test_content)
+        print(f"[DEBUG] Successfully uploaded GCS test file: gs://{BUCKET_NAME}/{test_blob_name}")
+        return True
+    except Exception as e:
+        print(f"[ERROR] Failed to upload GCS test file: {e}")
+        traceback.print_exc()
+        return False
+# --- END NEW FUNCTION ---
+
+# ... (init_driver function) ...
+
+# ... (take_debug_screenshot function) ...
+
+# ... (upload_to_gcs function) ...
+
+def login_and_capture():
+    print(f"[DEBUG] Starting screenshot job. GCS Bucket: {BUCKET_NAME}")
+    
+    # --- CALL NEW GCS TEST FUNCTION HERE ---
+    if not test_gcs_upload():
+        print("[ERROR] GCS connectivity test failed. Aborting script.")
+        # Optionally, raise an exception or exit here if GCS is critical for even starting.
+        # For now, we'll let it proceed to see if other errors arise.
+    # --- END CALL ---
+
+    driver = init_driver()
+    wait = WebDriverWait(driver, 15)
 
 def init_driver():
     chrome_options = Options()
