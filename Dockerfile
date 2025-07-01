@@ -1,17 +1,38 @@
-# Use a specific Node.js version for your base image
-FROM node:20-slim
+# Use a pre-built Selenium image with Chrome
+FROM selenium/standalone-chrome:latest
 
-# Set working directory inside the container
-WORKDIR /usr/src/app
+# Set timezone (if different from default in Selenium image)
+ENV TZ=Europe/London
 
-# Install Puppeteer and other Node.js dependencies
-# Copy package.json and package-lock.json first to leverage Docker layer caching
-COPY package.json ./
-RUN npm install --omit=dev # --omit=dev skips devDependencies for smaller image
+# Switch to the default user provided by the Selenium image (usually 'seluser')
+USER seluser
+# The typical home directory for 'seluser' in Selenium images
+WORKDIR /home/seluser
 
-# Copy your application code
-# Copies everything from your local project directory into the container's WORKDIR
-COPY . .
+# Install Python dependencies from requirements.txt
+# The selenium/standalone-chrome image usually comes with Python 3.x installed.
+# We'll create a virtual environment for your dependencies.
+# Use 'python3' as the executable name, as that's typical in these images.
+# Note: The base image often includes Python 3, so a full apt-get install for python3.11 is usually not needed.
+RUN python3 -m venv venv && \
+    /usr/bin/python3 -m pip install --upgrade pip --break-system-packages
 
-# Command to run your Node.js script when the container starts
-CMD ["node", "index.js"]
+# Add the virtual environment's bin directory to the PATH
+ENV PATH="/home/seluser/venv/bin:$PATH"
+COPY --chown=seluser:seluser requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt --break-system-packages
+
+# Copy your Python application script into the container
+COPY --chown=seluser:seluser hi_candidate_screenshot_job.py .
+
+# --- Simplified ENTRYPOINT for pre-built image ---
+# The Selenium image handles Xvfb/display and Chrome/Chromedriver setup internally.
+# We just run your Python script.
+ENTRYPOINT ["/bin/bash", "-c", "\
+  echo '--- Running Python script (from Selenium base image) ---' >&2; \
+  python hi_candidate_screenshot_job.py 2>&1; \
+  SCRIPT_EXIT_CODE=$?; \
+  \
+  echo '--- Python script finished with exit code: '$SCRIPT_EXIT_CODE' ---' >&2; \
+  exit $SCRIPT_IT_CODE; \
+"]
