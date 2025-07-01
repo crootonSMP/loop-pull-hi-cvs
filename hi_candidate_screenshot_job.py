@@ -10,62 +10,50 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from google.cloud import storage
-import sys # Added for explicit flush
+import sys
 
-print("[DEBUG] Script started: __main__ block executing.") # TOP-LEVEL ENTRY POINT
-sys.stdout.flush() # Ensure this initial print is seen
-sys.stderr.flush() # Ensure this initial print is seen
+print("[DEBUG] Script started: __main__ block executing.")
+sys.stdout.flush()
+sys.stderr.flush()
 
-# Define GCS bucket
 BUCKET_NAME = os.getenv("DEBUG_SCREENSHOT_BUCKET", "recruitment-engine-cvs-sp-260625")
-storage_client = storage.Client() # Global client for efficiency
+storage_client = storage.Client()
 
-# --- Function to test GCS connectivity ---
 def test_gcs_upload():
     print("[DEBUG] Entered test_gcs_upload()")
-    sys.stdout.flush() # Ensure this print is seen
-    sys.stderr.flush() # Ensure this print is seen
+    sys.stdout.flush()
+    sys.stderr.flush()
 
     test_filename = f"gcs_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
     test_content = f"This is a test file uploaded from Cloud Run at {datetime.now().isoformat()}."
     test_blob_name = f"debug_test/{test_filename}"
-
-    print(f"[DEBUG] Attempting to upload GCS test file: {test_blob_name}")
-    sys.stdout.flush() # Ensure this print is seen
-    sys.stderr.flush() # Ensure this print is seen
 
     try:
         bucket = storage_client.bucket(BUCKET_NAME)
         blob = bucket.blob(test_blob_name)
         blob.upload_from_string(test_content)
         print(f"[DEBUG] Successfully uploaded GCS test file: gs://{BUCKET_NAME}/{test_blob_name}")
-        sys.stdout.flush() # Ensure this print is seen
-        sys.stderr.flush() # Ensure this print is seen
+        sys.stdout.flush()
+        sys.stderr.flush()
         return True
     except Exception as e:
         print(f"[ERROR] Failed to upload GCS test file: {e}")
-        sys.stdout.flush() # Ensure error print is seen
-        traceback.print_exc() # Print the full traceback
-        sys.stderr.flush() # CRITICAL: Ensure traceback is flushed to stderr
+        sys.stdout.flush()
+        traceback.print_exc()
+        sys.stderr.flush()
         return False
 
-# --- Initializes the Selenium WebDriver ---
-# --- Initializes the Selenium WebDriver ---
 def init_driver():
     chrome_options = Options()
     chrome_options.add_argument('--no-sandbox')
-    chrome_options.add_argument('--disable-dev-shm-usage') # Prevents /dev/shm issues
-    chrome_options.add_argument('--disable-gpu') # Good practice for headless
+    chrome_options.add_argument('--disable-dev-shm-usage')
+    chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--window-size=1920,1080')
     chrome_options.add_argument('--remote-debugging-port=9222')
-    chrome_options.add_argument('--log-path=/tmp/chrome_debug_python.log') # Chrome's own logs
-
-    # --- FIX: Handle user data directory issue ---
-    chrome_options.add_argument('--disable-dev-shm-usage') # Often paired with no-profile
-    chrome_options.add_argument('--no-zygote') # Sometimes helps with process issues
-    chrome_options.add_argument('--single-process') # Can simplify process management in containers
-    # Tell Chrome not to use a persistent user profile
-    chrome_options.add_argument('--no-proxy-server') # Sometimes helps in docker
+    chrome_options.add_argument('--log-path=/tmp/chrome_debug_python.log')
+    chrome_options.add_argument('--no-zygote')
+    chrome_options.add_argument('--single-process')
+    chrome_options.add_argument('--no-proxy-server')
     chrome_options.add_argument('--no-first-run')
     chrome_options.add_argument('--no-default-browser-check')
     chrome_options.add_argument('--disable-background-networking')
@@ -81,200 +69,115 @@ def init_driver():
     chrome_options.add_argument('--ignore-certificate-errors')
     chrome_options.add_argument('--allow-insecure-localhost')
 
-    # This is the direct fix for "user data directory already in use"
-    # Create a temporary directory unique to this session for Chrome's user data
     temp_user_data_dir = os.path.join("/tmp", "chrome-user-data-" + str(int(time.time())))
     chrome_options.add_argument(f'--user-data-dir={temp_user_data_dir}')
-    # --- END FIX ---
 
     print("[DEBUG] Initializing headless Chrome WebDriver...")
     sys.stdout.flush()
     sys.stderr.flush()
-    
-    service = Service(log_path="/tmp/chromedriver_debug.log", verbose=True) 
 
+    service = Service(log_path="/tmp/chromedriver_debug.log", verbose=True)
     return webdriver.Chrome(service=service, options=chrome_options)
 
-# --- Takes a screenshot and returns the filename if successful ---
 def take_debug_screenshot(driver, name):
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"screenshot_{name}_{timestamp}.png"
         print(f"[DEBUG] Attempting to save screenshot to: {os.path.join(os.getcwd(), filename)}")
-        sys.stdout.flush() # Ensure this print is seen
-        sys.stderr.flush() # Ensure this print is seen
+        sys.stdout.flush()
         success = driver.save_screenshot(filename)
         if success:
             print(f"Saved screenshot: {filename}")
-            sys.stdout.flush() # Ensure this print is seen
-            sys.stderr.flush() # Ensure this print is seen
             return filename
         else:
             print(f"[ERROR] driver.save_screenshot() returned False for {filename}")
-            sys.stdout.flush() # Ensure this print is seen
-            sys.stderr.flush() # Ensure this print is seen
             return None
     except Exception as e:
         print(f"[ERROR] Failed to take screenshot: {e}")
-        sys.stdout.flush() # Ensure error print is seen
-        traceback.print_exc() # Print the full traceback
-        sys.stderr.flush() # Ensure traceback is flushed
+        traceback.print_exc()
         return None
 
-# --- Uploads a local file to GCS ---
 def upload_to_gcs(filename):
     if not os.path.exists(filename):
         print(f"[ERROR] File does not exist locally: {filename}. Cannot upload to GCS.")
-        sys.stdout.flush() # Ensure this print is seen
-        sys.stderr.flush() # Ensure this print is seen
         return
     try:
         bucket = storage_client.bucket(BUCKET_NAME)
         blob = bucket.blob(f"debug/{filename}")
-        print(f"[DEBUG] Attempting GCS upload for {filename} to gs://{BUCKET_NAME}/debug/{filename}")
-        sys.stdout.flush() # Ensure this print is seen
-        sys.stderr.flush() # Ensure this print is seen
+        print(f"[DEBUG] Uploading {filename} to gs://{BUCKET_NAME}/debug/{filename}")
         blob.upload_from_filename(filename)
-        print(f"Uploaded {filename} to gs://{BUCKET_NAME}/debug/{filename}")
-        sys.stdout.flush() # Ensure this print is seen
-        sys.stderr.flush() # Ensure this print is seen
+        print(f"Uploaded {filename}")
     except Exception as e:
         print(f"[ERROR] GCS upload failed for {filename}: {e}")
-        sys.stdout.flush() # Ensure error print is seen
-        traceback.print_exc() # Print the full traceback
-        sys.stderr.flush() # Ensure traceback is flushed
+        traceback.print_exc()
     finally:
-        # Clean up local file after upload attempt
         try:
             if os.path.exists(filename):
                 os.remove(filename)
-                print(f"Deleted local screenshot file: {filename}")
-                sys.stdout.flush() # Ensure this print is seen
-                sys.stderr.flush() # Ensure this print is seen
+                print(f"Deleted local screenshot: {filename}")
         except Exception as e:
             print(f"Failed to delete local file {filename}: {e}")
-            sys.stdout.flush() # Ensure error print is seen
-            sys.stderr.flush() # Ensure error print is seen
 
-# --- Main workflow ---
 def login_and_capture():
     print(f"[DEBUG] Starting screenshot job. GCS Bucket: {BUCKET_NAME}")
-    sys.stdout.flush() # Ensure this print is seen
-    sys.stderr.flush() # Ensure this print is seen
+    sys.stdout.flush()
 
     if not test_gcs_upload():
-        print("[ERROR] GCS connectivity test failed. Aborting script as GCS is required.")
-        sys.stdout.flush() # Ensure this print is seen
-        sys.stderr.flush() # Ensure this print is seen
-        return
+        print("[ERROR] GCS test failed. Exiting.")
+        sys.exit(1)
 
-    print("[DEBUG] Attempting to initialize WebDriver...")
-    sys.stdout.flush() # Ensure this print is seen
-    sys.stderr.flush() # Ensure this print is seen
-    driver = None # Initialize driver to None for finally block
+    username = os.environ.get("HIRE_USERNAME")
+    password = os.environ.get("HIRE_PASSWORD")
+    if not username or not password:
+        print("[ERROR] Missing HIRE_USERNAME or HIRE_PASSWORD environment variables.")
+        sys.exit(1)
+
+    driver = None
     try:
         driver = init_driver()
-        print("[DEBUG] WebDriver initialized successfully.")
-        sys.stdout.flush() # Ensure this print is seen
-        sys.stderr.flush() # Ensure this print is seen
-    except Exception as e:
-        print(f"[ERROR] Failed to initialize WebDriver: {e}")
-        sys.stdout.flush() # Ensure error print is seen
-        traceback.print_exc() # Print the full traceback
-        sys.stderr.flush() # Ensure traceback is flushed
-        # --- Check for both Chrome and Chromedriver logs here ---
-        if os.path.exists("/tmp/chrome_debug_python.log"):
-            print("--- Contents of /tmp/chrome_debug_python.log after init failure ---")
-            sys.stdout.flush() ; sys.stderr.flush()
-            with open("/tmp/chrome_debug_python.log", "r") as f:
-                print(f.read())
-            sys.stdout.flush() ; sys.stderr.flush()
-            print("--- End contents of /tmp/chrome_debug_python.log ---")
-            sys.stdout.flush() ; sys.stderr.flush()
-        else:
-            print("No /tmp/chrome_debug_python.log found.")
-            sys.stdout.flush() ; sys.stderr.flush()
+        wait = WebDriverWait(driver, 15)
 
-        if os.path.exists("/tmp/chromedriver_debug.log"):
-            print("--- Contents of /tmp/chromedriver_debug.log after init failure ---")
-            sys.stdout.flush() ; sys.stderr.flush()
-            with open("/tmp/chromedriver_debug.log", "r") as f:
-                print(f.read())
-            sys.stdout.flush() ; sys.stderr.flush()
-            print("--- End contents of /tmp/chromedriver_debug.log ---")
-            sys.stdout.flush() ; sys.stderr.flush()
-        else:
-            print("No /tmp/chromedriver_debug.log found.")
-            sys.stdout.flush() ; sys.stderr.flush()
-        
-        return # Abort if driver fails to init
-
-    wait = WebDriverWait(driver, 15)
-
-    try:
         print("[DEBUG] Navigating to login page...")
-        sys.stdout.flush() ; sys.stderr.flush()
         driver.get("https://clients.hireintelligence.io/login")
-        filename = take_debug_screenshot(driver, "login_page_loaded")
-        if filename:
-            upload_to_gcs(filename)
-
-        username = os.environ.get("HIRE_USERNAME")
-        password = os.environ.get("HIRE_PASSWORD")
-        print(f"[DEBUG] Using username: {username}") # Consider masking username in production
-        sys.stdout.flush() ; sys.stderr.flush()
+        upload_to_gcs(take_debug_screenshot(driver, "login_page_loaded"))
 
         wait.until(EC.presence_of_element_located((By.ID, "email"))).send_keys(username)
         wait.until(EC.presence_of_element_located((By.ID, "password"))).send_keys(password)
         wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Sign In')]"))).click()
-        print("[DEBUG] Submitted login form.")
-        sys.stdout.flush() ; sys.stderr.flush()
 
+        print("[DEBUG] Submitted login form.")
         wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(),'Jobs Listed')]")))
-        print("[DEBUG] Dashboard loaded.")
-        sys.stdout.flush() ; sys.stderr.flush()
-        filename = take_debug_screenshot(driver, "dashboard_loaded")
-        if filename:
-            upload_to_gcs(filename)
+        upload_to_gcs(take_debug_screenshot(driver, "dashboard_loaded"))
 
         print("[DEBUG] Navigating to Multi-Candidate View...")
-        sys.stdout.flush() ; sys.stderr.flush()
-        multi_view_button = wait.until(EC.element_to_be_clickable((
-            By.XPATH, "//button[contains(text(),'Multi-Candidate View')]")))
-        multi_view_button.click()
+        wait.until(EC.element_to_be_clickable((
+            By.XPATH, "//button[contains(text(),'Multi-Candidate View')]"))).click()
 
         wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(),'Candidate Tracker')]")))
-        print("[DEBUG] Multi-candidate view loaded.")
-        sys.stdout.flush() ; sys.stderr.flush()
-        filename = take_debug_screenshot(driver, "multi_candidate_view")
-        if filename:
-            upload_to_gcs(filename)
+        upload_to_gcs(take_debug_screenshot(driver, "multi_candidate_view"))
 
+        # Optional final screenshot
+        upload_to_gcs(take_debug_screenshot(driver, "final_state"))
+
+        # Optional: log browser console output
+        # for entry in driver.get_log('browser'):
+        #     print(f"[BROWSER LOG] {entry}")
+
+        print("[SUCCESS] Script completed all steps successfully.")
     except TimeoutException as e:
-        print("[ERROR] Timeout waiting for page element:", e)
-        sys.stdout.flush() ; sys.stderr.flush()
+        print("[ERROR] TimeoutException:", e)
         traceback.print_exc()
-        sys.stdout.flush() ; sys.stderr.flush()
-        filename = take_debug_screenshot(driver, "timeout_error") # Take error screenshot
-        if filename:
-            upload_to_gcs(filename)
+        upload_to_gcs(take_debug_screenshot(driver, "timeout_error"))
     except Exception as e:
         print("[ERROR] Unexpected error:", e)
-        sys.stdout.flush() ; sys.stderr.flush()
         traceback.print_exc()
-        sys.stdout.flush() ; sys.stderr.flush()
-        filename = take_debug_screenshot(driver, "unexpected_error") # Take error screenshot
-        if filename:
-            upload_to_gcs(filename)
+        upload_to_gcs(take_debug_screenshot(driver, "unexpected_error"))
     finally:
-        if driver: # Ensure driver exists before quitting
+        if driver:
             print("[DEBUG] Closing browser.")
-            sys.stdout.flush() ; sys.stderr.flush()
             driver.quit()
         else:
-            print("[DEBUG] Driver not initialized, no browser to close.")
-            sys.stdout.flush() ; sys.stderr.flush()
-
+            print("[DEBUG] Driver was not initialized.")
 
 if __name__ == "__main__":
     login_and_capture()
