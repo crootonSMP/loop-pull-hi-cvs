@@ -213,7 +213,8 @@ def login_and_capture():
 
         print("[DEBUG] Navigating to Multi-Candidate View...")
         sys.stdout.flush() ; sys.stderr.flush()
-        multi_view_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Multi-Candidate View')]")))
+        multi_view_button = wait.until(EC.element_to_be_clickable((
+            By.XPATH, "//button[contains(text(),'Multi-Candidate View')]")))
         multi_view_button.click()
 
         wait.until(EC.presence_of_element_located((By.XPATH, "//div[contains(text(),'Candidate Tracker')]")))
