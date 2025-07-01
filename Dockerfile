@@ -10,6 +10,7 @@ ENV TZ=Europe/London
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11 \
     python3-pip \
+    python3.11-venv \ # <--- ADD THIS LINE
     build-essential \
     curl \
     unzip \
