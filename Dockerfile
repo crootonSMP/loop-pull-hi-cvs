@@ -1,32 +1,22 @@
 # Use a pre-built Selenium image with Chrome
-FROM selenium/standalone-chrome:latest
+FROM selenium/standalone-chrome:124.0
 
 ENV TZ=Europe/London
 
-# Switch to the default user provided by the Selenium image (usually 'seluser')
+# Switch to the default user provided by the Selenium image
 USER seluser
-# The typical home directory for 'seluser' in Selenium images
 WORKDIR /home/seluser
 
-# Install Python dependencies from requirements.txt
-# We'll create a virtual environment for your dependencies.
-RUN python3 -m venv venv && \
-    venv/bin/python -m pip install --upgrade pip --break-system-packages # <-- FIX APPLIED HERE: Use venv's pip
-
-# Add the virtual environment's bin directory to the PATH
-ENV PATH="/home/seluser/venv/bin:$PATH"
-
-# Copy your requirements.txt file into the container
+# Install Python dependencies directly (NO venv)
 COPY --chown=seluser:seluser requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Python dependencies into the virtual environment
-RUN pip install --no-cache-dir -r requirements.txt --break-system-packages # This pip will now be the one from venv/bin
-
-# Copy your Python application script into the container
+# Copy your script
 COPY --chown=seluser:seluser hi_candidate_screenshot_job.py .
 
+# Run the script
 ENTRYPOINT ["/bin/bash", "-c", "\
-  echo '--- Running Python script (from Selenium base image) ---' >&2; \
+  echo '--- Running Python script (no venv) ---' >&2; \
   export DISPLAY=:99; \
   python hi_candidate_screenshot_job.py 2>&1; \
   SCRIPT_EXIT_CODE=$?; \
