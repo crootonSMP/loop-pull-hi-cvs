@@ -58,22 +58,34 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy your Python application script into the container
 COPY --chown=appuser:appuser hi_candidate_screenshot_job.py .
 
-# ... (rest of your Dockerfile remains the same) ...
-
-# ... (rest of your Dockerfile remains the same as the "full working docker" you provided) ...
-
-# --- TEMPORARY ENTRYPOINT FOR MAX CHROME DEBUGGING ---
-# This will ONLY attempt to launch Chrome manually and exit immediately after.
-# Its sole purpose is to capture ALL possible Chrome startup errors.
+# --- TEMPORARY ENTRYPOINT FOR FILE INSPECTION AFTER SCRIPT RUN ---
+# This will run your Python script, then list/cat temporary files, then exit.
 ENTRYPOINT ["/bin/bash", "-c", "\
-  echo '--- CHROME STANDALONE LAUNCH START (Direct to STDERR) ---' >&2; \
-  # Execute Chrome, enabling verbose logging and redirecting all output to stderr \
-  /opt/chrome/chrome --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --dump-dom 'about:blank' --enable-logging --v=1 2>&1; \
-  RET_CODE=$?; \
-  echo '--- CHROME STANDALONE LAUNCH EXIT CODE: '$RET_CODE' (Direct to STDERR) ---' >&2; \
-  echo '--- END CHROME STANDALONE LAUNCH OUTPUT (Direct to STDERR) ---' >&2; \
+  echo '--- Running Python script ---' >&2; \
+  python hi_candidate_screenshot_job.py 2>&1 | tee /dev/stderr; \
+  SCRIPT_EXIT_CODE=$?; \
   \
-  # Exit immediately with Chrome's exit code to ensure logs are flushed \
-  exit $RET_CODE; \
+  echo '--- Listing files in current directory (/home/appuser/app) ---' >&2; \
+  ls -lh /home/appuser/app >&2; \
+  \
+  echo '--- Attempting to print contents of any PNG files (WARNING: binary output) ---' >&2; \
+  for f in /home/appuser/app/*.png; do \
+    if [ -f \"$f\" ]; then \
+      echo \"--- Contents of $f ---\" >&2; \
+      cat \"$f\" >&2; \
+      echo \"--- End contents of $f ---\" >&2; \
+    fi \
+  done; \
+  \
+  echo '--- CHROME DEBUG LOG from Python run (if any) ---' >&2; \
+  if [ -f /tmp/chrome_debug_python.log ]; then \
+    cat /tmp/chrome_debug_python.log >&2; \
+  else \
+    echo 'No /tmp/chrome_debug_python.log found.' >&2; \
+  fi; \
+  echo '--- END CHROME DEBUG LOG ---' >&2; \
+  \
+  echo '--- Container exiting with script code ---' >&2; \
+  exit $SCRIPT_EXIT_CODE; \
 "]
 # --- END TEMPORARY ENTRYPOINT ---
