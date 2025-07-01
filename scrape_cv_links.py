@@ -32,26 +32,23 @@ wait = WebDriverWait(driver, 20)
 
 try:
     # Step 1: Load login page
-    print("➡️ Opening login page...")
-    driver.get("https://clients.hireintelligence.io/login")
-    wait.until(EC.presence_of_element_located((By.NAME, "email"))).send_keys(EMAIL)
-    driver.find_element(By.NAME, "password").send_keys(PASSWORD)
-    driver.find_element(By.XPATH, '//button[contains(text(), "Login")]').click()
-    print("✅ Login submitted")
-    
-    # Wait for dashboard to show job count
-    wait.until(EC.presence_of_element_located((By.XPATH, '//*[contains(text(), "Jobs Listed")]')))
-    time.sleep(2)  # Allow iframe updates
-    driver.save_screenshot("/tmp/after_login.png")
-    upload_to_gcs("/tmp/after_login.png", "debug/after_login.png")
+print("➡️ Opening login page...")
+driver.get("https://clients.hireintelligence.io/login")
 
-    # Step 2: Navigate to multi-candidate admin
-    print("➡️ Navigating to multi-candidate-admin page")
-    driver.execute_script('window.location = "https://clients.hireintelligence.io/multi-candidate-admin";')
-    wait.until(EC.presence_of_element_located((By.XPATH, '//*[contains(text(), "All [") or contains(text(), "All [0")]')))
-    time.sleep(2)
-    driver.save_screenshot("/tmp/multi_admin_loaded.png")
-    upload_to_gcs("/tmp/multi_admin_loaded.png", "debug/multi_admin_loaded.png")
+# Wait for iframe and switch into it (if one exists)
+wait.until(EC.presence_of_element_located((By.TAG_NAME, "iframe")))
+iframe = driver.find_element(By.TAG_NAME, "iframe")
+driver.switch_to.frame(iframe)
+print("✅ Switched to login iframe")
+
+# Proceed with login
+wait.until(EC.presence_of_element_located((By.NAME, "email"))).send_keys(EMAIL)
+driver.find_element(By.NAME, "password").send_keys(PASSWORD)
+driver.find_element(By.XPATH, '//button[contains(text(), "Login")]').click()
+print("✅ Login submitted")
+
+# Switch back to main content after login
+driver.switch_to.default_content()
 
     # (Optional: Further scraping logic goes here)
 
