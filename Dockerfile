@@ -5,7 +5,6 @@ FROM selenium/standalone-chrome:latest
 ENV TZ=Europe/London
 
 # Switch to root to perform system-level installations
-# This is necessary as apt-get requires root privileges.
 USER root
 
 # Install common utilities (as a last resort for very obscure missing dependencies)
@@ -15,34 +14,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     net-tools \
     && rm -rf /var/lib/apt/lists/*
 
-# The selenium/standalone-chrome image typically has Python 3 with pip pre-installed.
-# Removed: RUN apt-get install -y python3-pip && rm -rf /var/lib/apt/lists/*
+# NO LONGER INSTALLING PYTHON3-PIP explicitly, it's typically present.
+# We will use pip directly below.
 
 # Switch back to the default non-root user for security
 USER seluser
 # The typical home directory for 'seluser' in Selenium images
 WORKDIR /home/seluser
 
-# Install Python dependencies into a virtual environment
-# Create virtual environment and upgrade pip within it, explicitly breaking system packages
-RUN python3 -m venv venv && \
-    venv/bin/python3 -m pip install --upgrade pip --break-system-packages
-
-# Add the virtual environment's bin directory to the PATH
-ENV PATH="/home/seluser/venv/bin:$PATH"
-
-# Copy your requirements.txt file into the container
+# --- FIX: INSTALL PYTHON DEPENDENCIES SYSTEM-WIDE (no venv) ---
+# Copy requirements.txt to a location where 'seluser' can read it
 COPY --chown=seluser:seluser requirements.txt .
 
-# Install Python dependencies into the virtual environment
-RUN pip install --no-cache-dir -r requirements.txt --break-system-packages
+# Install Python dependencies system-wide (as 'seluser' if pip allows, or use root temporarily)
+# Use 'python3 -m pip' to invoke pip reliably
+# --break-system-packages is still crucial for system-wide installs on these base images
+RUN python3 -m pip install --no-cache-dir -r requirements.txt --break-system-packages
+# --- END FIX ---
+
+# Removed venv creation and activation (ENV PATH=...) as we're installing system-wide.
+# Removed: RUN python3 -m venv venv ...
+# Removed: ENV PATH="/home/seluser/venv/bin:$PATH"
 
 # Copy your Python application script into the container
 COPY --chown=seluser:seluser hi_candidate_screenshot_job.py .
 
-# --- Simplified ENTRYPOINT for pre-built image ---
-# The Selenium image handles Xvfb/display and Chrome/Chromedriver setup internally.
-# This ENTRYPOINT simply runs your Python script.
+# --- Simplified ENTRYPOINT remains the same ---
 ENTRYPOINT ["/bin/bash", "-c", "\
   echo '--- Running Python script (from Selenium base image) ---' >&2; \
   python hi_candidate_screenshot_job.py 2>&1; \
