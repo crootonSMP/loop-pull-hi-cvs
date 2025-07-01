@@ -4,6 +4,7 @@ import traceback
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service  # ✅ ADDED THIS IMPORT
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -20,12 +21,13 @@ def init_driver():
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--window-size=1920,1080')
+    chrome_options.add_argument('--remote-debugging-port=9222')
 
     print("[DEBUG] Initializing headless Chrome WebDriver...")
-
-    service = Service("/usr/bin/chromedriver/chromedriver")  # ✅ FIXED LINE
+    service = Service("/usr/bin/chromedriver/chromedriver")
     return webdriver.Chrome(service=service, options=chrome_options)
-    
+
+
 def take_debug_screenshot(driver, step_name):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"screenshot_{step_name}_{timestamp}.png"
@@ -104,4 +106,3 @@ def login_and_capture():
 
 if __name__ == "__main__":
     login_and_capture()
-
