@@ -1,5 +1,5 @@
 # Use a pre-built Selenium image with Chrome
-FROM selenium/standalone-chrome:4.19.1-20240316 
+FROM selenium/standalone-chrome:latest
 
 ENV TZ=Europe/London
 
