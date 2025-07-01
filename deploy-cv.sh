@@ -3,16 +3,17 @@
 set -e  # Exit on error
 
 # Define common variables for easier management and consistency
-JOB_TAG="latest" # Simple tag for the single consolidated job
-JOB_NAME="daily-hire-screenshot-job" # Name for the new screenshot job
+JOB_TAG="latest"
+JOB_NAME="daily-hire-screenshot-job-v01-01" # Using the job name from your latest successful build output
 IMAGE_NAME="europe-west2-docker.pkg.dev/intelligent-recruitment-engine/recruitment-engine-repo/${JOB_NAME}:${JOB_TAG}"
 REGION="europe-west2"
 MEMORY="1Gi" # Adjust as needed based on browser memory usage
 CPU="1"
 TASK_TIMEOUT="1800" # 30 minutes timeout
 
-# DB Connection details (if still needed by the base image, otherwise can be removed)
-# Although the new script doesn't interact with DB directly, the environment might still expect it
+# DB Connection details (needs to match your Cloud SQL instance)
+# These are still passed as environment variables/secrets for consistency with the broader project setup,
+# even if this specific screenshot script doesn't directly use the DB.
 DB_CONNECTION_INSTANCE="intelligent-recruitment-engine:europe-west2:recruitment-db-main"
 
 # Step 1: Prepare workspace
@@ -25,7 +26,7 @@ cd ~/loop-cvs || exit 1
 echo "Current directory contents:"
 ls -l
 echo "Dockerfile content (snippet):"
-head -n 20 Dockerfile # Show more lines to include Chrome installation
+head -n 20 Dockerfile
 echo "requirements.txt content:"
 cat requirements.txt
 
@@ -41,33 +42,20 @@ docker push "${IMAGE_NAME}" || exit 1
 echo "Step 4: Creating/Updating Cloud Run Job: ${JOB_NAME}"
 gcloud run jobs deploy "${JOB_NAME}" \
   --region="${REGION}" \
-  --memory "${MEMORY}" \
-  --cpu "${CPU}" \
+  --memory="${MEMORY}" \
+  --cpu="${CPU}" \
   --image="${IMAGE_NAME}" \
   --task-timeout="${TASK_TIMEOUT}" \
-  --set-env-vars="HIRE_USERNAME=crootonmaster@applygateway.com" \
-  --set-secrets="HIRE_PASSWORD=hire-password:latest" \
-  # If DB_CONNECTION_NAME is truly no longer needed by the *entrypoint script itself*,
-  # you could remove it, but often base environments still implicitly rely on it.
-  # For now, keeping it consistent with previous setup if no issues arise.
   --set-env-vars="DB_CONNECTION_NAME=${DB_CONNECTION_INSTANCE},HIRE_USERNAME=crootonmaster@applygateway.com" \
+  --set-secrets="HIRE_PASSWORD=hire-password:latest,DB_USER=db-user:latest,DB_PASSWORD=db-password:latest,DB_NAME=db-name:latest" \
   --set-cloudsql-instances="${DB_CONNECTION_INSTANCE}" \
   || exit 1
 
-echo "Waiting for job '${JOB_NAME}' to be ready..."
-for i in {1..10}; do
-    JOB_STATUS=$(gcloud run jobs describe "${JOB_NAME}" --region="${REGION}" --format="value(status.latestCreatedExecution.completionTime)" 2>/dev/null)
-    if [ -n "${JOB_STATUS}" ]; then
-        echo "Job '${JOB_NAME}' is ready."
-        break
-    else
-        echo "Job '${JOB_NAME}' not yet ready (attempt ${i}/10). Waiting 15 seconds..."
-        sleep 15
-    fi
-    if [ "$i" -eq 10 ]; then
-        echo "Error: Job '${JOB_NAME}' did not become ready after multiple attempts. Manual check required."
-        exit 1
-    fi
-done
+# --- REMOVED THE JOB READINESS CHECK LOOP ---
+# This loop is only relevant if you immediately execute the job after deployment and want to wait for its completion.
+# The `gcloud run jobs deploy` command itself already confirms if the job *definition* was deployed successfully.
+# --- END REMOVED SECTION ---
 
-echo "Deployment script completed. Job '${JOB_NAME}' is ready for execution."
+echo "Deployment script completed. Job '${JOB_NAME}' is deployed and ready for execution."
+echo "To manually execute this job, use: gcloud run jobs execute ${JOB_NAME} --region=${REGION}"
+echo "To view execution logs, go to Cloud Logging and filter by Cloud Run Job: ${JOB_NAME}"
