@@ -16,7 +16,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Install system dependencies - optimized for layer caching
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \  # Added for SSL verification
+    ca-certificates \
     wget \
     unzip \
     xvfb \
