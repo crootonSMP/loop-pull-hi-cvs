@@ -1,9 +1,13 @@
 import os
 import time
-import logging
-import requests
-from io import BytesIO
+import signal
+import subprocess
+import traceback
 from datetime import datetime
+from typing import Optional
+import logging
+from dataclasses import dataclass
+from io import BytesIO
 
 # Selenium imports
 from selenium import webdriver
@@ -19,49 +23,60 @@ from google.cloud import storage
 from google.cloud import secretmanager
 import google.auth
 
+# Requests for API calls
+import requests
+
 # Load environment variables
 from dotenv import load_dotenv
 
-# Typing imports
-from typing import Optional
+# Enhanced Configuration
+@dataclass
+class Config:
+    username: str = os.getenv('HIRE_USERNAME', '')
+    password: str = os.getenv('HIRE_PASSWORD', '')
+    headless: bool = os.getenv('HEADLESS', 'true').lower() == 'true'
+    explicit_wait: int = int(os.getenv('EXPLICIT_WAIT', '120'))  # Increased to 2 minutes
+    chrome_driver_path: str = os.getenv('CHROMEDRIVER_PATH', '/usr/local/bin/chromedriver')
+    screenshot_bucket: str = os.getenv('DEBUG_SCREENSHOT_BUCKET', 'recruitment-engine-cvs-sp-260625')
 
-# Logging Setup
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+    def validate(self):
+        if not all([self.username, self.password]):
+            raise ValueError("Missing credentials in environment variables")
+        if not os.path.exists(self.chrome_driver_path):
+            raise FileNotFoundError(f"Chromedriver not found at {self.chrome_driver_path}")
+        return self
 
-# Global driver for cookie access
-driver = None
+# Enhanced Logging
+def setup_logging():
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)  # More verbose logging
+    
+    formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
+    return logger
 
-# Google Cloud Clients
-storage_client = storage.Client()
-secret_client = secretmanager.SecretManagerServiceClient()
+logger = setup_logging()
 
-def get_project_id():
-    """Resolve GCP project from ADC"""
-    _, project_id = google.auth.default()
-    if not project_id:
-        raise RuntimeError("Could not determine GCP Project ID")
-    return project_id
-
-GCP_PROJECT_ID = get_project_id()
-
-def get_secret(secret_id: str) -> str:
-    """Fetch secret from Secret Manager"""
-    name = f"projects/{GCP_PROJECT_ID}/secrets/{secret_id}/versions/latest"
-    payload = secret_client.access_secret_version(request={"name": name}).payload.data
-    return payload.decode("utf-8").strip()
-
-def setup_driver() -> webdriver.Chrome:
+def setup_driver(config: Config) -> webdriver.Chrome:
     """Initialize WebDriver with enhanced options"""
     chrome_options = Options()
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--window-size=1920,1080')
-    chrome_options.add_argument('--headless=new')
+    
+    if config.headless:
+        chrome_options.add_argument('--headless=new')
     
     service = Service(
-        executable_path="/usr/local/bin/chromedriver",
+        executable_path=config.chrome_driver_path,
         service_args=['--verbose', '--log-path=/tmp/chromedriver.log']
     )
     
@@ -73,15 +88,15 @@ def setup_driver() -> webdriver.Chrome:
         logger.error(f"Driver initialization failed: {str(e)}")
         raise
 
-def upload_screenshot(name: str) -> bool:
+def upload_screenshot(driver: webdriver.Chrome, config: Config, name: str) -> bool:
     """Capture and upload screenshot with error handling"""
-    global driver
     try:
         screenshot = driver.get_screenshot_as_png()
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         blob_name = f"screenshots/{name}_{timestamp}.png"
         
-        bucket = storage_client.bucket("recruitment-engine-cvs-sp-260625")
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(config.screenshot_bucket)
         blob = bucket.blob(blob_name)
         
         with BytesIO(screenshot) as image_stream:
@@ -93,73 +108,131 @@ def upload_screenshot(name: str) -> bool:
         logger.error(f"Failed to upload screenshot: {str(e)}")
         return False
 
-def perform_login() -> bool:
-    """Perform login using Selenium"""
-    global driver
-    username = os.getenv('HIRE_USERNAME', '')
-    password = get_secret("hire-password")  # Updated to match deploy.sh secret name
-    
+def perform_login(driver: webdriver.Chrome, config: Config) -> bool:
+    """Simplified login flow with screenshots and dynamic element handling"""
     login_success = False
     try:
+        # Step 1: Navigate to login page
         driver.get("https://clients.hireintelligence.io/login")
-        time.sleep(2)
+        time.sleep(2)  # Allow initial load
         logger.info("Navigated to login page")
-        upload_screenshot("login_page")
+        upload_screenshot(driver, config, "login_page")
 
-        WebDriverWait(driver, 120).until(
+        # Step 2: Wait for the form to load with longer timeout
+        WebDriverWait(driver, config.explicit_wait).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "form"))
         )
         logger.debug("Login form detected")
 
-        email = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='email']"))
-        )
-        email.send_keys(username)
+        # Step 3: Find email field with multiple attempts
+        email = None
+        for attempt in range(3):
+            try:
+                email = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='email']"))
+                )
+                break
+            except:
+                try:
+                    email = driver.find_element(By.CSS_SELECTOR, "input[type='email']")
+                    break
+                except:
+                    try:
+                        email = driver.find_element(By.XPATH, "//input[contains(@id, 'email')]")
+                        break
+                    except:
+                        if attempt < 2:
+                            time.sleep(2)
+                            continue
+                        raise
+        email.send_keys(config.username)
         logger.debug("Entered username")
 
-        password_field = driver.find_element(By.CSS_SELECTOR, "input[name='password']")
-        password_field.send_keys(password)
+        # Step 4: Find password field
+        password = None
+        for attempt in range(3):
+            try:
+                password = driver.find_element(By.CSS_SELECTOR, "input[name='password']")
+                break
+            except:
+                try:
+                    password = driver.find_element(By.XPATH, "//input[@type='password']")
+                    break
+                except:
+                    if attempt < 2:
+                        time.sleep(2)
+                        continue
+                    raise
+        password.send_keys(config.password)
         logger.debug("Entered password")
 
-        submit = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+        # Step 5: Submit form
+        submit = None
+        for attempt in range(3):
+            try:
+                submit = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+                break
+            except:
+                try:
+                    submit = driver.find_element(By.XPATH, "//button[contains(text(), 'Login')]")
+                    break
+                except:
+                    if attempt < 2:
+                        time.sleep(2)
+                        continue
+                    raise
         submit.click()
         logger.debug("Clicked submit button")
 
-        WebDriverWait(driver, 120).until(
+        # Step 6: Verify login success with fallback
+        WebDriverWait(driver, config.explicit_wait).until(
             EC.url_contains("clients.hireintelligence.io")
         )
         login_success = True
         logger.info("Login successful")
-        upload_screenshot("login_success")
+        upload_screenshot(driver, config, "login_success")
         return True
 
     except Exception as e:
         logger.error(f"Login failed: {str(e)}")
-        upload_screenshot("login_failed")
+        logger.debug(f"Full page source:\n{driver.page_source}")  # Log full source
+        logger.debug(f"Stack trace:\n{traceback.format_exc()}")
+        upload_screenshot(driver, config, "login_failed")
         return False
     finally:
-        if login_success:
+        if login_success and upload_screenshot(driver, config, "login_success"):
             return True
         return False
 
-def upload_file_to_gcs(file_content: BytesIO, destination_blob_name: str) -> bool:
-    """Upload a file (e.g., CV) to GCS"""
+def get_first_cv_id(driver: webdriver.Chrome) -> Optional[int]:
+    """Extract the CV ID from the first row of the multi-candidate-admin table"""
     try:
-        bucket = storage_client.bucket("recruitment-engine-cvs-sp-260625")
-        blob = bucket.blob(destination_blob_name)
-        file_content.seek(0)
-        blob.upload_from_file(file_content, content_type='application/pdf')
-        logger.info(f"Uploaded file to: gs://recruitment-engine-cvs-sp-260625/{destination_blob_name}")
-        return True
+        driver.get("https://clients.hireintelligence.io/multi-candidate-admin")
+        WebDriverWait(driver, 120).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "table"))
+        )
+        upload_screenshot(driver, config, "multi_candidate_admin")
+        logger.info("Captured multi-candidate-admin page")
+
+        # Assume the table has a column with CV ID (adjust selector based on HAR and page inspection)
+        first_row = driver.find_element(By.CSS_SELECTOR, "table tbody tr:first-child")
+        cv_id_element = first_row.find_element(By.CSS_SELECTOR, "[data-cv-id], td:nth-child(2)")  # Adjusted based on HAR
+        cv_id = int(cv_id_element.text.strip())
+        logger.info(f"Extracted first CV ID: {cv_id}")
+        return cv_id
     except Exception as e:
-        logger.error(f"Failed to upload file to GCS: {e}")
+        logger.error(f"Failed to extract first CV ID: {str(e)}")
+        upload_screenshot(driver, config, "multi_candidate_admin_failed")
+        return None
+
+def download_first_cv(driver: webdriver.Chrome, config: Config) -> bool:
+    """Download the first CV from multi-candidate-admin and upload to GCS"""
+    cv_id = get_first_cv_id(driver)
+    if cv_id is None:
+        logger.error("No CV ID extracted, skipping download")
         return False
 
-def download_cv(cv_id: int) -> tuple[str, BytesIO]:
-    """Download a CV using the API with Selenium cookies"""
-    api_key = get_secret("cv-download-api-key")
-    
-    # Step 1: Fetch CV metadata with Selenium cookies
+    # Fetch CV metadata using API (from HAR)
     metadata_url = "https://partnersapi.applygateway.com/api/Candidate/CandidateCombination"
     params = {
         "buyerId": "1061",
@@ -168,7 +241,7 @@ def download_cv(cv_id: int) -> tuple[str, BytesIO]:
         "loggedInBuyer": "1061"
     }
     try:
-        global driver
+        # Use Selenium cookies for authentication
         cookies = {cookie['name']: cookie['value'] for cookie in driver.get_cookies()}
         response = requests.get(metadata_url, params=params, cookies=cookies, timeout=30)
         response.raise_for_status()
@@ -178,9 +251,10 @@ def download_cv(cv_id: int) -> tuple[str, BytesIO]:
         logger.info(f"Retrieved metadata for CV {cv_id}: {cv_file_name}")
     except requests.exceptions.RequestException as e:
         logger.error(f"Failed to fetch CV metadata for {cv_id}: {e}")
-        return None, None
+        return False
 
-    # Step 2: Download CV
+    # Download CV using apiKey (from HAR)
+    api_key = get_secret("cv-download-api-key")
     download_url = "https://cvfilemanager.applygateway.com/v1/cv/download"
     params = {
         "apiKey": api_key,
@@ -191,63 +265,79 @@ def download_cv(cv_id: int) -> tuple[str, BytesIO]:
         response.raise_for_status()
         file_content = BytesIO(response.content)
         logger.info(f"Downloaded CV for {cv_id}")
-        return cv_file_name, file_content
+
+        # Upload to GCS
+        destination_blob_name = f"cvs/{cv_file_name}"
+        if upload_screenshot(driver, config, "cv_download_success"):  # Screenshot on success
+            if upload_file_to_gcs(driver, config, file_content, destination_blob_name):
+                logger.info(f"Successfully uploaded CV {cv_id} to {destination_blob_name}")
+                return True
+        return False
     except requests.exceptions.RequestException as e:
         logger.error(f"Failed to download CV for {cv_id}: {e}")
-        return None, None
+        upload_screenshot(driver, config, "cv_download_failed")
+        return False
 
-def get_top_cv_id() -> Optional[int]:
-    """Extract the CV ID from the first row of the multi-candidate-admin table"""
-    global driver
+def upload_file_to_gcs(driver: webdriver.Chrome, config: Config, file_content: BytesIO, destination_blob_name: str) -> bool:
+    """Upload a file (e.g., CV) to GCS with screenshot integration"""
     try:
-        driver.get("https://clients.hireintelligence.io/multi-candidate-admin")
-        WebDriverWait(driver, 120).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "table"))
-        )
-        upload_screenshot("multi_candidate_admin")
-        logger.info("Captured multi-candidate-admin page")
-
-        # Assume the table has a column with CV ID (adjust selector based on page structure)
-        first_row = driver.find_element(By.CSS_SELECTOR, "table tbody tr:first-child")
-        cv_id_element = first_row.find_element(By.CSS_SELECTOR, "[data-cv-id], [id*=cv], td:nth-child(2)")  # Adjust selector
-        cv_id = int(cv_id_element.text.strip())
-        logger.info(f"Extracted top CV ID: {cv_id}")
-        return cv_id
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(config.screenshot_bucket)
+        blob = bucket.blob(destination_blob_name)
+        file_content.seek(0)
+        blob.upload_from_file(file_content, content_type='application/pdf')
+        logger.info(f"Uploaded file to: gs://{config.screenshot_bucket}/{destination_blob_name}")
+        return True
     except Exception as e:
-        logger.error(f"Failed to extract top CV ID: {str(e)}")
-        upload_screenshot("multi_candidate_admin_failed")
-        return None
+        logger.error(f"Failed to upload file to GCS: {e}")
+        upload_screenshot(driver, config, "gcs_upload_failed")
+        return False
 
-def main():
-    load_dotenv()  # Load environment variables
-    global driver
-    driver = setup_driver()
-    
-    if not perform_login():
-        logger.error("Login failed, exiting job")
-        driver.quit()
+def main() -> int:
+    driver = None
+    try:
+        config = Config().validate()
+        logger.info("Starting screenshot and CV capture job")
+        
+        driver = setup_driver(config)
+        
+        # 1. Login flow
+        if not perform_login(driver, config):
+            logger.warning("Login attempt failed, but proceeding with navigation - check screenshots")
+        else:
+            logger.info("Login succeeded, proceeding with navigation")
+        
+        # 2. Capture dashboard with wait
+        driver.get("https://clients.hireintelligence.io/")
+        WebDriverWait(driver, config.explicit_wait).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "body"))
+        )
+        upload_screenshot(driver, config, "dashboard")
+        
+        # 3. Capture admin page and download first CV
+        try:
+            download_first_cv(driver, config)
+            logger.info("CV download process completed")
+        except Exception as e:
+            logger.error(f"Failed to download first CV: {str(e)}")
+            upload_screenshot(driver, config, "cv_download_error")
+        
+        logger.info("Job completed successfully")
+        return 0
+        
+    except Exception as e:
+        logger.error(f"Job failed: {str(e)}")
+        logger.debug(f"Stack trace:\n{traceback.format_exc()}")
+        upload_screenshot(driver, config, "job_failed") if driver else None
         return 1
-    
-    cv_id = get_top_cv_id()
-    if cv_id is None:
-        logger.error("Failed to get top CV ID, exiting job")
-        driver.quit()
-        return 1
-    
-    bucket_name = "recruitment-engine-cvs-sp-260625"
-    cv_ids = [cv_id]  # Use the top CV ID
-
-    for cv_id in cv_ids:
-        cv_file_name, file_content = download_cv(cv_id)
-        if cv_file_name and file_content:
-            destination_blob_name = f"cvs/{cv_file_name}"
-            if upload_file_to_gcs(file_content, destination_blob_name):
-                logger.info(f"Successfully processed CV {cv_id}")
-            time.sleep(1)  # Respect server load with 1-second delay
-
-    logger.info("Job completed")
-    driver.quit()
-    return 0
+    finally:
+        if driver:
+            try:
+                driver.quit()
+                logger.info("Browser terminated")
+            except Exception as e:
+                logger.error(f"Error quitting browser: {str(e)}")
+                subprocess.run(["pkill", "-9", "-f", "chrome"], stderr=subprocess.DEVNULL)
 
 if __name__ == "__main__":
     exit(main())
