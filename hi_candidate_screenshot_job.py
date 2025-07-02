@@ -90,121 +90,64 @@ def verify_chrome_installation() -> bool:
 
 def setup_driver(config: Config) -> webdriver.Chrome:
     """Configure and initialize Chrome WebDriver with robust options"""
+    import tempfile
+    import shutil
+    
     if not verify_chrome_installation():
         raise RuntimeError("Chrome/Chromedriver verification failed")
     
     chrome_options = Options()
     
-    # Generate unique profile directory per instance
-    import uuid
-    chrome_profile = f"/tmp/chrome-profile-{uuid.uuid4().hex[:8]}"
+    # Create unique temp directory
+    temp_dir = tempfile.mkdtemp(prefix='chrome-')
+    profile_dir = os.path.join(temp_dir, 'profile')
+    os.makedirs(profile_dir, exist_ok=True)
     
     # Essential configuration
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument(f'--window-size={config.screen_width},{config.screen_height}')
-    chrome_options.add_argument(f'--user-data-dir={chrome_profile}')  # Unique dir
+    chrome_options.add_argument(f'--user-data-dir={profile_dir}')
     chrome_options.add_argument('--disable-application-cache')
     
-    # Add these critical flags for container stability
+    # Critical stability flags
     chrome_options.add_argument('--single-process')
     chrome_options.add_argument('--no-zygote')
     chrome_options.add_argument('--disable-setuid-sandbox')
+    chrome_options.add_argument('--remote-debugging-port=0')  # Auto-select port
     
     # Headless configuration
     if config.headless:
         chrome_options.add_argument('--headless=new')
     
-    # Configure service with logging
+    # Configure service
     service = Service(
         executable_path=config.chrome_driver_path,
-        service_args=['--verbose'],
-        log_path='chromedriver.log'
+        service_args=[
+            '--verbose',
+            f'--user-data-dir={profile_dir}',
+            '--log-path=chromedriver.log'
+        ]
     )
     
     try:
-        driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver = webdriver.Chrome(
+            service=service,
+            options=chrome_options,
+            service_log_path='chromedriver.log'
+        )
         driver.implicitly_wait(config.implicit_wait)
-        logger.info(f"WebDriver initialized with profile: {chrome_profile}")
+        logger.info(f"Chrome started with profile: {profile_dir}")
         return driver
     except Exception as e:
         logger.error(f"Driver initialization failed: {str(e)}")
-        # Cleanup profile directory if creation failed
-        subprocess.run(["rm", "-rf", chrome_profile], check=False)
+        # Clean up temp directory
+        try:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception as cleanup_error:
+            logger.warning(f"Failed to clean up temp dir: {cleanup_error}")
         raise RuntimeError("Failed to initialize WebDriver") from e
-
-def login_to_hireintelligence(driver: webdriver.Chrome, config: Config) -> None:
-    """Handle login to the HireIntelligence application"""
-    logger.info("Starting login process")
-    
-    try:
-        driver.get("https://clients.hireintelligence.io/login")
-        WebDriverWait(driver, config.explicit_wait).until(
-            EC.presence_of_element_located((By.TAG_NAME, "body"))
-        )  # ✅ FIXED: closing parenthesis
-        
-        iframes = WebDriverWait(driver, config.explicit_wait).until(
-            EC.presence_of_all_elements_located((By.TAG_NAME, "iframe")))
-        
-        if not iframes:
-            raise RuntimeError("No login iframes found")
-            
-        for idx, iframe in enumerate(iframes, 1):
-            try:
-                logger.info(f"Attempting login with iframe {idx}")
-                driver.switch_to.frame(iframe)
-                
-                # Unified element location strategy
-                def find_with_fallback(*selectors):
-                    for selector in selectors:
-                        try:
-                            return driver.find_element(By.CSS_SELECTOR, selector)
-                        except:
-                            continue
-                    raise NoSuchElementException("No matching elements found")  # ✅ FIXED
-                
-                email_field = find_with_fallback(
-                    "input[name='email']",
-                    "input[type='email']",
-                    "#email"
-                )
-                email_field.clear()
-                email_field.send_keys(config.username)
-                
-                password_field = find_with_fallback(
-                    "input[name='password']",
-                    "input[type='password']",
-                    "#password"
-                )
-                password_field.clear()
-                password_field.send_keys(config.password)
-                
-                submit_button = find_with_fallback(
-                    "button[type='submit']",
-                    "button[id*='login']",
-                    "#login-button"
-                )
-                submit_button.click()
-                
-                # Verify login success
-                WebDriverWait(driver, 10).until_not(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='password']")))
-                logger.info("Login successful")
-                driver.switch_to.default_content()
-                return
-                
-            except Exception as e:
-                logger.warning(f"Login attempt {idx} failed: {str(e)}")
-                driver.switch_to.default_content()
-                continue
-                
-        raise RuntimeError("All login attempts failed")
-        
-    except Exception as e:
-        logger.error(f"Login process failed: {str(e)}")
-        driver.save_screenshot("login_error.png")
-        raise
 
 def extract_data_from_retool(driver: webdriver.Chrome, config: Config) -> pd.DataFrame:
     """Extract and save data from Retool application"""
@@ -268,7 +211,6 @@ def extract_data_from_retool(driver: webdriver.Chrome, config: Config) -> pd.Dat
         driver.switch_to.default_content()
 
 def main() -> int:
-    """Main execution function with proper error handling"""
     driver = None
     try:
         config = Config().validate()
@@ -281,9 +223,6 @@ def main() -> int:
         logger.info("Job completed successfully")
         return 0
         
-    except ValueError as e:
-        logger.error(f"Configuration error: {str(e)}")
-        return 1
     except Exception as e:
         logger.critical(f"Job failed: {str(e)}", exc_info=True)
         return 1
@@ -294,7 +233,9 @@ def main() -> int:
                 logger.info("Browser terminated")
             except Exception as e:
                 logger.warning(f"Error during driver quit: {str(e)}")
-            subprocess.run(["pkill", "-f", "chrome"], stderr=subprocess.DEVNULL)
+            # Force cleanup
+            subprocess.run(["pkill", "-9", "-f", "chrome"], stderr=subprocess.DEVNULL)
+            subprocess.run(["pkill", "-9", "-f", "chromedriver"], stderr=subprocess.DEVNULL)
 
 if __name__ == "__main__":
     exit(main())
