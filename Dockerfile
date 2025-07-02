@@ -1,10 +1,9 @@
 # Stage 1: Builder - Modernized with security improvements
-FROM python:3.10-slim as builder
+FROM python:3.10-slim AS builder
 
 # Set build arguments with defaults
 ARG TZ=Europe/London
 ARG DEBIAN_FRONTEND=noninteractive
-ARG CHROME_VERSION="116.0.5845.96-1"  # Pinned stable version
 
 # System configuration - consolidated ENV
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -37,11 +36,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Chrome - using pinned version
-RUN wget -q -O /tmp/google-chrome.deb \
-    "https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_${CHROME_VERSION}_amd64.deb" \
-    && apt-get install -y --no-install-recommends /tmp/google-chrome.deb \
-    && rm -f /tmp/google-chrome.deb
+# Install Chrome using Chrome for Testing
+RUN CHROME_VERSION=$(wget -qO- https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_STABLE) \
+    && wget -q "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROME_VERSION}/linux64/chrome-linux64.zip" \
+    && unzip chrome-linux64.zip -d /opt \
+    && ln -s /opt/chrome-linux64/chrome /usr/bin/google-chrome \
+    && rm chrome-linux64.zip
 
 # Install ChromeDriver - using chrome-for-testing endpoint
 RUN CHROME_MAJOR=$(google-chrome --version | cut -d ' ' -f3 | cut -d '.' -f1) \
@@ -58,7 +58,7 @@ FROM python:3.10-slim
 # Copy only the minimal required files from builder
 COPY --from=builder /usr/bin/google-chrome /usr/bin/
 COPY --from=builder /usr/local/bin/chromedriver /usr/local/bin/
-COPY --from=builder /usr/lib/chromium-browser/ /usr/lib/chromium-browser/
+COPY --from=builder /opt/chrome-linux64 /opt/chrome-linux64
 COPY --from=builder /usr/lib/x86_64-linux-gnu/ /usr/lib/x86_64-linux-gnu/
 
 # Copy only required library dependencies
