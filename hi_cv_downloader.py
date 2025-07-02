@@ -2,8 +2,6 @@ import os
 import time
 import logging
 import requests
-import subprocess
-import traceback
 from io import BytesIO
 from datetime import datetime
 
@@ -37,11 +35,6 @@ driver = None
 # Google Cloud Clients
 storage_client = storage.Client()
 secret_client = secretmanager.SecretManagerServiceClient()
-
-# Placeholder Config class
-class Config:
-    def validate(self):
-        return self  # Add validation logic if needed
 
 def get_project_id():
     """Resolve GCP project from ADC"""
@@ -169,8 +162,9 @@ def get_first_cv_id() -> Optional[int]:
         upload_screenshot("multi_candidate_admin")
         logger.info("Captured multi-candidate-admin page")
 
+        # Adjust selector based on page inspection (HAR suggests CvId in a data attribute or column)
         first_row = driver.find_element(By.CSS_SELECTOR, "table tbody tr:first-child")
-        cv_id_element = first_row.find_element(By.CSS_SELECTOR, "[data-cv-id], td:nth-child(2)")
+        cv_id_element = first_row.find_element(By.CSS_SELECTOR, "[data-cv-id], td:nth-child(2)")  # Refine as needed
         cv_id = int(cv_id_element.text.strip() or cv_id_element.get_attribute("data-cv-id"))
         logger.info(f"Extracted first CV ID: {cv_id}")
         return cv_id
@@ -182,13 +176,12 @@ def get_first_cv_id() -> Optional[int]:
 
 def download_first_cv() -> bool:
     """Download the first CV from multi-candidate-admin and upload to GCS"""
-    global driver
     cv_id = get_first_cv_id()
     if cv_id is None:
         logger.error("No CV ID extracted, skipping download")
         return False
 
-    # Fetch CV metadata using API
+    # Fetch CV metadata using API (from HAR)
     metadata_url = "https://partnersapi.applygateway.com/api/Candidate/CandidateCombination"
     params = {
         "buyerId": "1061",
@@ -197,18 +190,19 @@ def download_first_cv() -> bool:
         "loggedInBuyer": "1061"
     }
     try:
+        global driver
         cookies = {cookie['name']: cookie['value'] for cookie in driver.get_cookies()}
         response = requests.get(metadata_url, params=params, cookies=cookies, timeout=30)
         response.raise_for_status()
         metadata = response.json()
         file_name = metadata["data"]["fileName"]
-        cv_file_name = metadata["data"]["cvFileName"]
+        cv_file_name = metadata["data"]["cvFileName"]  # e.g., "James-Mason-5620275.pdf"
         logger.info(f"Retrieved metadata for CV {cv_id}: {cv_file_name}")
     except requests.exceptions.RequestException as e:
         logger.error(f"Failed to fetch CV metadata for {cv_id}: {e}")
         return False
 
-    # Download CV using apiKey
+    # Download CV using apiKey (from HAR)
     api_key = get_secret("cv-download-api-key")
     download_url = "https://cvfilemanager.applygateway.com/v1/cv/download"
     params = {
@@ -223,34 +217,36 @@ def download_first_cv() -> bool:
 
         # Upload to GCS
         destination_blob_name = f"cvs/{cv_file_name}"
-        storage_client = storage.Client()
-        bucket = storage_client.bucket("recruitment-engine-cvs-sp-260625")
-        blob = bucket.blob(destination_blob_name)
-        file_content.seek(0)
-        blob.upload_from_file(file_content, content_type='application/pdf')
-        logger.info(f"Uploaded CV to: gs://recruitment-engine-cvs-sp-260625/{destination_blob_name}")
-        upload_screenshot("cv_download_success")
-        return True
+        if upload_screenshot(driver, config, "cv_download_success"):  # Screenshot on success
+            storage_client = storage.Client()
+            bucket = storage_client.bucket("recruitment-engine-cvs-sp-260625")
+            blob = bucket.blob(destination_blob_name)
+            file_content.seek(0)
+            blob.upload_from_file(file_content, content_type='application/pdf')
+            logger.info(f"Uploaded CV to: gs://recruitment-engine-cvs-sp-260625/{destination_blob_name}")
+            return True
+        return False
     except requests.exceptions.RequestException as e:
         logger.error(f"Failed to download CV for {cv_id}: {e}")
-        upload_screenshot("cv_download_failed")
+        upload_screenshot(driver, config, "cv_download_failed")
         return False
 
 def main() -> int:
-    """Main function to execute the CV download job"""
-    global driver
+    driver = None
     try:
         config = Config().validate()
         logger.info("Starting screenshot and CV capture job")
         
-        driver = setup_driver()
+        driver = setup_driver(config)
         
+        # 1. Login flow
         if not perform_login():
             logger.error("Login failed, exiting job")
             return 1
         else:
             logger.info("Login succeeded, proceeding with CV download")
 
+        # 2. Download first CV
         if not download_first_cv():
             logger.error("CV download failed, check screenshots")
             return 1
@@ -261,8 +257,7 @@ def main() -> int:
     except Exception as e:
         logger.error(f"Job failed: {str(e)}")
         logger.debug(f"Stack trace: {traceback.format_exc()}")
-        if driver:
-            upload_screenshot("job_failed")
+        upload_screenshot(driver, config, "job_failed") if driver else None
         return 1
     finally:
         if driver:
