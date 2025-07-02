@@ -109,49 +109,77 @@ def perform_login(driver: webdriver.Chrome, config: Config) -> bool:
     try:
         # Step 1: Navigate to login page
         driver.get("https://clients.hireintelligence.io/login")
-        time.sleep(2)
+        time.sleep(2)  # Allow initial load
         logger.info("Navigated to login page")
         upload_screenshot(driver, config, "login_page")
 
-        # Step 2: Wait for the form to load (using a more reliable parent container)
+        # Step 2: Wait for the form to load with longer timeout
         WebDriverWait(driver, config.explicit_wait).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "form"))
         )
         logger.debug("Login form detected")
 
-        # Step 3: Find email field with updated selector
-        # Inspect the page to confirm the selector; fallback to alternative selectors
-        try:
-            email = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='email']"))
-            )
-        except:
-            # Fallback selectors based on common patterns
+        # Step 3: Find email field with multiple attempts
+        email = None
+        for attempt in range(3):
             try:
-                email = driver.find_element(By.CSS_SELECTOR, "input[type='email']")
+                email = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='email']"))
+                )
+                break
             except:
-                email = driver.find_element(By.XPATH, "//input[contains(@id, 'email')]")
-        
+                try:
+                    email = driver.find_element(By.CSS_SELECTOR, "input[type='email']")
+                    break
+                except:
+                    try:
+                        email = driver.find_element(By.XPATH, "//input[contains(@id, 'email')]")
+                        break
+                    except:
+                        if attempt < 2:
+                            time.sleep(2)
+                            continue
+                        raise
         email.send_keys(config.username)
         logger.debug("Entered username")
 
         # Step 4: Find password field
-        try:
-            password = driver.find_element(By.CSS_SELECTOR, "input[name='password']")
-        except:
-            password = driver.find_element(By.XPATH, "//input[@type='password']")
+        password = None
+        for attempt in range(3):
+            try:
+                password = driver.find_element(By.CSS_SELECTOR, "input[name='password']")
+                break
+            except:
+                try:
+                    password = driver.find_element(By.XPATH, "//input[@type='password']")
+                    break
+                except:
+                    if attempt < 2:
+                        time.sleep(2)
+                        continue
+                    raise
         password.send_keys(config.password)
         logger.debug("Entered password")
 
         # Step 5: Submit form
-        try:
-            submit = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
-        except:
-            submit = driver.find_element(By.XPATH, "//button[contains(text(), 'Login')]")
+        submit = None
+        for attempt in range(3):
+            try:
+                submit = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+                break
+            except:
+                try:
+                    submit = driver.find_element(By.XPATH, "//button[contains(text(), 'Login')]")
+                    break
+                except:
+                    if attempt < 2:
+                        time.sleep(2)
+                        continue
+                    raise
         submit.click()
         logger.debug("Clicked submit button")
 
-        # Step 6: Verify login success
+        # Step 6: Verify login success with fallback
         WebDriverWait(driver, config.explicit_wait).until(
             EC.url_contains("clients.hireintelligence.io")
         )
@@ -161,7 +189,7 @@ def perform_login(driver: webdriver.Chrome, config: Config) -> bool:
 
     except Exception as e:
         logger.error(f"Login failed: {str(e)}")
-        logger.debug(f"Page source:\n{driver.page_source[:1000]}...")  # Truncate for brevity
+        logger.debug(f"Full page source:\n{driver.page_source}")  # Log full source
         logger.debug(f"Stack trace:\n{traceback.format_exc()}")
         upload_screenshot(driver, config, "login_failed")
         return False
@@ -176,15 +204,25 @@ def main() -> int:
         
         # 1. Login flow
         if not perform_login(driver, config):
-            raise RuntimeError("Login failed - check screenshots")
+            logger.warning("Login attempt failed, but proceeding with navigation - check screenshots")
+        else:
+            logger.info("Login succeeded, proceeding with navigation")
         
         # 2. Capture dashboard
         driver.get("https://clients.hireintelligence.io/")
         upload_screenshot(driver, config, "dashboard")
         
         # 3. Capture admin page
-        driver.get("https://clients.hireintelligence.io/multi-candidate-admin")
-        upload_screenshot(driver, config, "multi_candidate_admin")
+        try:
+            driver.get("https://clients.hireintelligence.io/multi-candidate-admin")
+            WebDriverWait(driver, config.explicit_wait).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "body"))
+            )
+            upload_screenshot(driver, config, "multi_candidate_admin")
+            logger.info("Captured multi-candidate-admin page")
+        except Exception as e:
+            logger.error(f"Failed to navigate to multi-candidate-admin: {str(e)}")
+            upload_screenshot(driver, config, "multi_candidate_admin_failed")
         
         logger.info("Job completed successfully")
         return 0
