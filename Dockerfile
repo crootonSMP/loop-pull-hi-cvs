@@ -51,7 +51,8 @@ ENV CHROME_BIN=/usr/bin/google-chrome \
     DISPLAY=:99 \
     SCREEN_WIDTH=1920 \
     SCREEN_HEIGHT=1080 \
-    SE_SHM_SIZE="2g"
+    SE_SHM_SIZE="2g" \
+    PATH="/app/.local/bin:$PATH"
 
 # Create non-root user
 RUN groupadd -r scraper && \
@@ -69,5 +70,4 @@ RUN pip install --user --no-cache-dir -r requirements.txt
 # Copy application code
 COPY --chown=scraper:scraper . .
 
-# Set the entrypoint to run the script
-CMD ["python", "hi_cv_downloader.py"]
+CMD ["python", "hi_candidate_screenshot_job.py"]
