@@ -95,25 +95,26 @@ def setup_driver(config: Config) -> webdriver.Chrome:
     
     chrome_options = Options()
     
+    # Generate unique profile directory per instance
+    import uuid
+    chrome_profile = f"/tmp/chrome-profile-{uuid.uuid4().hex[:8]}"
+    
     # Essential configuration
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument(f'--window-size={config.screen_width},{config.screen_height}')
-    chrome_options.add_argument('--user-data-dir=/tmp/chrome-profile')
+    chrome_options.add_argument(f'--user-data-dir={chrome_profile}')  # Unique dir
     chrome_options.add_argument('--disable-application-cache')
+    
+    # Add these critical flags for container stability
+    chrome_options.add_argument('--single-process')
+    chrome_options.add_argument('--no-zygote')
+    chrome_options.add_argument('--disable-setuid-sandbox')
     
     # Headless configuration
     if config.headless:
         chrome_options.add_argument('--headless=new')
-    
-    # Stability and anti-detection
-    chrome_options.add_argument('--disable-infobars')
-    chrome_options.add_argument('--disable-extensions')
-    chrome_options.add_argument('--disable-blink-features=AutomationControlled')
-    chrome_options.add_argument('--disable-notifications')
-    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    chrome_options.add_experimental_option('useAutomationExtension', False)
     
     # Configure service with logging
     service = Service(
@@ -124,12 +125,13 @@ def setup_driver(config: Config) -> webdriver.Chrome:
     
     try:
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.set_window_size(config.screen_width, config.screen_height)
         driver.implicitly_wait(config.implicit_wait)
-        logger.info("WebDriver initialized successfully")
+        logger.info(f"WebDriver initialized with profile: {chrome_profile}")
         return driver
     except Exception as e:
         logger.error(f"Driver initialization failed: {str(e)}")
+        # Cleanup profile directory if creation failed
+        subprocess.run(["rm", "-rf", chrome_profile], check=False)
         raise RuntimeError("Failed to initialize WebDriver") from e
 
 def login_to_hireintelligence(driver: webdriver.Chrome, config: Config) -> None:
