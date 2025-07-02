@@ -11,7 +11,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     TZ=${TZ} \
     CHROME_BIN=/usr/bin/google-chrome \
-    CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
+    CHROMEDRIVER_PATH=/usr/local/bin/chromedriver \
+    DISPLAY=:99 \
+    SCREEN_WIDTH=1920 \
+    SCREEN_HEIGHT=1080 \
+    SCREEN_DEPTH=24 \
+    DBUS_SESSION_BUS_ADDRESS=/dev/null \
+    CHROME_OPTS="--no-sandbox --disable-dev-shm-usage --disable-gpu --disable-software-rasterizer --disable-setuid-sandbox"
 
 # Install system dependencies - optimized for layer caching
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -38,13 +44,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Create shared memory directory
+RUN mkdir -p /dev/shm && chmod 1777 /dev/shm
+
 # Install Chrome and Chromedriver using Chrome for Testing
 RUN CHROME_VERSION=$(wget -qO- https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_STABLE) \
     && echo "Installing Chrome version: ${CHROME_VERSION}" \
-    && wget -q --tries=3 --retry-connrefused "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROME_VERSION}/linux64/chrome-linux64.zip" -O /tmp/chrome.zip \
+    && wget -q --tries=3 --retry-connrefused \
+       "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROME_VERSION}/linux64/chrome-linux64.zip" -O /tmp/chrome.zip \
     && unzip /tmp/chrome.zip -d /opt \
     && ln -s /opt/chrome-linux64/chrome /usr/bin/google-chrome \
-    && wget -q --tries=3 --retry-connrefused "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROME_VERSION}/linux64/chromedriver-linux64.zip" -O /tmp/chromedriver.zip \
+    && wget -q --tries=3 --retry-connrefused \
+       "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROME_VERSION}/linux64/chromedriver-linux64.zip" -O /tmp/chromedriver.zip \
     && unzip /tmp/chromedriver.zip -d /tmp/ \
     && mv /tmp/chromedriver-linux64/chromedriver /usr/local/bin/ \
     && chmod +x /usr/local/bin/chromedriver \
@@ -72,8 +83,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxtst6 \
     libxrender1 \
     libxi6 \
+    xvfb \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Create shared memory directory
+RUN mkdir -p /dev/shm && chmod 1777 /dev/shm
 
 # Copy only the minimal required files from builder
 COPY --from=builder /usr/bin/google-chrome /usr/bin/
@@ -92,6 +107,13 @@ ENV CHROME_BIN=/usr/bin/google-chrome \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DISPLAY=:99 \
+    SCREEN_WIDTH=1920 \
+    SCREEN_HEIGHT=1080 \
+    SCREEN_DEPTH=24 \
+    DBUS_SESSION_BUS_ADDRESS=/dev/null \
+    CHROME_OPTS="--no-sandbox --disable-dev-shm-usage --disable-gpu --disable-software-rasterizer --disable-setuid-sandbox" \
+    SE_SHM_SIZE="2g" \
     PATH="/home/scraper/.local/bin:$PATH"
 
 # Create secure non-root user environment
@@ -111,9 +133,14 @@ RUN pip install --user --no-cache-dir numpy==1.24.4 && \
 # Copy application code - with explicit permissions
 COPY --chown=scraper:scraper --chmod=644 . .
 
-# Health check (optional but recommended)
-HEALTHCHECK --interval=30s --timeout=3s \
-  CMD python -c "import selenium; import pandas" || exit 1
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s \
+  CMD python -c "import selenium; from selenium import webdriver; \
+  options = webdriver.ChromeOptions(); \
+  options.add_argument('--headless=new'); \
+  options.add_argument('--no-sandbox'); \
+  driver = webdriver.Chrome(options=options); \
+  driver.quit()" || exit 1
 
 # Runtime command - using exec form
 CMD ["python", "hi_candidate_screenshot_job.py"]
