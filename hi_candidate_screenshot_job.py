@@ -261,14 +261,5 @@ def main() -> int:
             driver.quit()
             logger.info("Browser terminated")
 
-        
-    except Exception as e:
-        logger.critical(f"Script failed: {str(e)}", exc_info=True)
-        return 1
-    finally:
-        if 'driver' in locals():
-            driver.quit()
-            logger.info("Browser terminated")
-
 if __name__ == "__main__":
     exit(main())
