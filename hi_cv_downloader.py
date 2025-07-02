@@ -11,7 +11,7 @@ from google.cloud import secretmanager
 import google.auth
 
 # Load environment variables
-from dotenv import load_dotenv  # Added import for load_dotenv
+from dotenv import load_dotenv
 
 # Logging Setup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -52,7 +52,7 @@ def upload_file_to_gcs(file_content: BytesIO, bucket_name: str, destination_blob
 
 def download_cv(cv_id: int) -> tuple[str, BytesIO]:
     """Download a CV using the API"""
-    api_key = get_secret("CV_DOWNLOAD_API_KEY")
+    api_key = get_secret("cv-download-api-key")  # Updated to match the existing secret name
     
     # Step 1: Fetch CV metadata
     metadata_url = "https://partnersapi.applygateway.com/api/Candidate/CandidateCombination"
