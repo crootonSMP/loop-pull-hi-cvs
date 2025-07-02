@@ -1,5 +1,6 @@
 import os
 import time
+import signal
 import subprocess
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Tuple
@@ -205,7 +206,7 @@ def main() -> int:
     driver = None
     try:
         config = Config().validate()
-        logger.info("Starting scraping job with configuration: %s", config)
+        logger.info(f"Starting scraping job with configuration: {config}")
         
         driver = setup_driver(config)
         
