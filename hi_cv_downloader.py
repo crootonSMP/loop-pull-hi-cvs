@@ -219,7 +219,10 @@ def perform_login(driver: webdriver.Chrome, config: Config) -> bool:
         return False
 
 def get_yesterdays_cvs(driver: webdriver.Chrome, config: Config, buyer_id: str = "1061") -> List[Dict]:
-    """Fetch CVs from Multi-Candidate Admin filtered by yesterday's date using date picker interaction"""
+    """Fetch CVs from Multi-Candidate Admin filtered by yesterday's date using date picker interaction and download button parsing"""
+    from datetime import datetime, timedelta
+    import re
+
     cv_list = []
     yesterday = datetime.now() - timedelta(days=1)
     yesterday_str = yesterday.strftime("%Y-%m-%d")
@@ -239,7 +242,7 @@ def get_yesterdays_cvs(driver: webdriver.Chrome, config: Config, buyer_id: str =
             EC.element_to_be_clickable((By.CSS_SELECTOR, ".MuiInputBase-root input"))
         )
         date_input.click()
-        time.sleep(1)  # let calendar render
+        time.sleep(1)  # Let calendar render
 
         # Step 2: Click yesterday's day in the calendar
         logger.debug(f"Trying to select day {yesterday_day} in calendar")
@@ -250,14 +253,13 @@ def get_yesterdays_cvs(driver: webdriver.Chrome, config: Config, buyer_id: str =
         )
         day_button.click()
         logger.info(f"Selected {yesterday_str} from calendar")
-        time.sleep(2)  # Wait for results to update
+        time.sleep(2)  # Wait for table to refresh
 
-        # Step 3: Wait for table to update
+        # Step 3: Wait for table to load
         WebDriverWait(driver, config.explicit_wait).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "table tr"))
         )
 
-        # Step 4: Extract CVs from table
         rows = driver.find_elements(By.CSS_SELECTOR, "table tr")
         for row in rows[1:]:  # Skip header
             try:
@@ -267,9 +269,14 @@ def get_yesterdays_cvs(driver: webdriver.Chrome, config: Config, buyer_id: str =
                     names = candidate_text.split()[0:2]
                     first_name = names[0] if len(names) > 0 else ""
                     last_name = names[1] if len(names) > 1 else ""
-                    user_id = row.get_attribute("data-user-id") or cells[0].get_attribute("data-user-id")
-                    cv_id = row.get_attribute("data-cv-id") or cells[0].get_attribute("data-cv-id")
-                    if user_id and cv_id:
+
+                    # Get the download button in the last cell
+                    download_button = cells[-1].find_element(By.TAG_NAME, "button")
+                    onclick_js = download_button.get_attribute("onclick")  # e.g., downloadCV('123','456')
+
+                    match = re.search(r"downloadCV\('([^']+)','([^']+)'\)", onclick_js)
+                    if match:
+                        user_id, cv_id = match.groups()
                         cv_list.append({
                             "first_name": first_name,
                             "last_name": last_name,
@@ -278,6 +285,9 @@ def get_yesterdays_cvs(driver: webdriver.Chrome, config: Config, buyer_id: str =
                             "buyer_id": buyer_id
                         })
                         logger.debug(f"Found CV: {first_name} {last_name} (UserID: {user_id}, CvID: {cv_id})")
+                    else:
+                        logger.warning(f"Could not parse IDs from onclick: {onclick_js}")
+
             except Exception as e:
                 logger.warning(f"Error processing row: {str(e)}")
                 continue
@@ -288,6 +298,7 @@ def get_yesterdays_cvs(driver: webdriver.Chrome, config: Config, buyer_id: str =
         logger.error(f"Failed to fetch CVs: {str(e)}")
         upload_screenshot(driver, config, "cv_list_failed")
         return []
+
 
 def download_cv(config: Config, cv_data: Dict) -> Optional[Dict]:
     """Download a single CV using the API observed in the HAR file"""
