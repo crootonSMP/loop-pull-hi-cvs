@@ -16,8 +16,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     SCREEN_WIDTH=1920 \
     SCREEN_HEIGHT=1080 \
     SCREEN_DEPTH=24 \
-    DBUS_SESSION_BUS_ADDRESS=/dev/null \
-    CHROME_OPTS="--no-sandbox --disable-dev-shm-usage --disable-gpu --disable-software-rasterizer --disable-setuid-sandbox"
+    DBUS_SESSION_BUS_ADDRESS=/dev/null
 
 # Install system dependencies - optimized for layer caching
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -103,6 +102,7 @@ COPY --from=builder /etc/fonts /etc/fonts
 # Environment variables - security focused
 ENV CHROME_BIN=/usr/bin/google-chrome \
     CHROMEDRIVER_PATH=/usr/local/bin/chromedriver \
+    CHROME_USER_DATA_DIR="/tmp/chrome-profile" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -112,7 +112,7 @@ ENV CHROME_BIN=/usr/bin/google-chrome \
     SCREEN_HEIGHT=1080 \
     SCREEN_DEPTH=24 \
     DBUS_SESSION_BUS_ADDRESS=/dev/null \
-    CHROME_OPTS="--no-sandbox --disable-dev-shm-usage --disable-gpu --disable-software-rasterizer --disable-setuid-sandbox" \
+    CHROME_OPTS="--no-sandbox --disable-dev-shm-usage --disable-gpu --single-process --no-zygote --disable-setuid-sandbox --remote-debugging-port=0" \
     SE_SHM_SIZE="2g" \
     PATH="/home/scraper/.local/bin:$PATH"
 
@@ -120,7 +120,10 @@ ENV CHROME_BIN=/usr/bin/google-chrome \
 RUN groupadd -r scraper && \
     useradd -r -g scraper -d /app -s /sbin/nologin scraper && \
     mkdir -p /app && \
-    chown -R scraper:scraper /app
+    chown -R scraper:scraper /app && \
+    mkdir -p "${CHROME_USER_DATA_DIR}" && \
+    chown -R scraper:scraper "${CHROME_USER_DATA_DIR}" && \
+    chmod 1777 /tmp
 
 WORKDIR /app
 USER scraper
@@ -139,6 +142,7 @@ HEALTHCHECK --interval=30s --timeout=10s \
   options = webdriver.ChromeOptions(); \
   options.add_argument('--headless=new'); \
   options.add_argument('--no-sandbox'); \
+  options.add_argument('--disable-dev-shm-usage'); \
   driver = webdriver.Chrome(options=options); \
   driver.quit()" || exit 1
 
