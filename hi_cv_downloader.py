@@ -219,39 +219,39 @@ def perform_login(driver: webdriver.Chrome, config: Config) -> bool:
         return False
 
 def get_yesterdays_cvs(driver: webdriver.Chrome, config: Config, buyer_id: str = "1061") -> List[Dict]:
-    """Fetch CVs from yesterday using the date picker and table"""
+    """Fetch all CVs from the table (date picker commented out for now)"""
     cv_list = []
-    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")  # 2025-07-01
+    # yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")  # 2025-07-01
     try:
-        logger.info(f"Navigating to multi-candidate-admin for {yesterday}")
+        logger.info("Navigating to multi-candidate-admin to fetch all CVs")
         driver.get("https://clients.hireintelligence.io/multi-candidate-admin")
         WebDriverWait(driver, config.explicit_wait).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "body"))
         )
         upload_screenshot(driver, config, "multi_candidate_admin")
 
-        # Set date picker (placeholder selector; adjust based on inspection)
-        date_picker = WebDriverWait(driver, config.explicit_wait).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='date']"))  # Adjust selector
-        )
-        date_picker.clear()
-        date_picker.send_keys(yesterday)
-        logger.debug("Date filter set to yesterday")
+        # Comment out date picker for now
+        # date_picker = WebDriverWait(driver, config.explicit_wait).until(
+        #     EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='date']"))  # Adjust selector
+        # )
+        # date_picker.clear()
+        # date_picker.send_keys(yesterday)
+        # logger.debug("Date filter set to yesterday")
 
         # Wait for table to update
         WebDriverWait(driver, config.explicit_wait).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "table tr"))  # Adjust selector
         )
 
-        # Extract data from table rows
+        # Extract data from all table rows
         rows = driver.find_elements(By.CSS_SELECTOR, "table tr")  # Adjust selector
         for row in rows[1:]:  # Skip header row
             try:
                 cells = row.find_elements(By.TAG_NAME, "td")
                 if len(cells) >= 7:  # Ensure enough columns (Date, App Status, Ref, Job Title, Location, Supplier, Candidate)
-                    date_text = cells[0].text.strip()  # "2025-06-29 3:02 pm"
-                    if not date_text.startswith(yesterday):  # Filter for yesterday
-                        continue
+                    # date_text = cells[0].text.strip()  # "2025-06-29 3:02 pm"
+                    # if not date_text.startswith(yesterday):  # Filter for yesterday
+                    #     continue
                     candidate_text = cells[6].text.strip()  # "Serah Adelakun [email protected] +44 7366687182"
                     names = candidate_text.split()[0:2]  # Split to get first and last name
                     first_name = names[0] if len(names) > 0 else ""
@@ -271,7 +271,7 @@ def get_yesterdays_cvs(driver: webdriver.Chrome, config: Config, buyer_id: str =
                 logger.warning(f"Error processing row: {str(e)}")
                 continue
 
-        logger.debug(f"Found {len(cv_list)} CVs for yesterday")
+        logger.debug(f"Found {len(cv_list)} CVs on the page")
         return cv_list
     except Exception as e:
         logger.error(f"Failed to fetch CVs: {str(e)}")
@@ -343,7 +343,7 @@ def main() -> int:
         )
         upload_screenshot(driver, config, "dashboard")
         
-        # 3. Capture admin page and process CVs
+        # 3. Capture admin page and process all CVs
         try:
             driver.get("https://clients.hireintelligence.io/multi-candidate-admin")
             WebDriverWait(driver, config.explicit_wait).until(
@@ -352,16 +352,16 @@ def main() -> int:
             upload_screenshot(driver, config, "multi_candidate_admin")
             logger.info("Captured multi-candidate-admin page")
 
-            # 4. Get and download CVs for yesterday
+            # 4. Get and download all CVs on the page
             cv_list = get_yesterdays_cvs(driver, config)
             if not cv_list:
-                logger.warning("No CVs found for yesterday")
+                logger.warning("No CVs found on the page")
             else:
-                yesterday_date = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")  # 20250701
+                current_date = datetime.now().strftime("%Y%m%d")  # 20250702
                 for cv in cv_list:
                     cv_data = download_cv(config, cv)
                     if cv_data:
-                        blob_name = f"cvs/{yesterday_date}/{cv_data['first_name']}-{cv_data['last_name']}-{cv_data['user_id']}-{cv_data['cv_id']}.pdf"
+                        blob_name = f"cvs/{current_date}/{cv_data['first_name']}-{cv_data['last_name']}-{cv_data['user_id']}-{cv_data['cv_id']}.pdf"
                         if upload_file_to_gcs(config, cv_data["content"], blob_name):
                             logger.info(f"Successfully processed CV {cv_data['cv_id']}")
                         else:
