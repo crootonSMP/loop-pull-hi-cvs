@@ -36,24 +36,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Chrome using Chrome for Testing
+# Install Chrome and Chromedriver using Chrome for Testing
 RUN CHROME_VERSION=$(wget -qO- https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_STABLE) \
-    && wget -q "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROME_VERSION}/linux64/chrome-linux64.zip" \
-    && unzip chrome-linux64.zip -d /opt \
+    && echo "Installing Chrome version: ${CHROME_VERSION}" \
+    && wget -q --tries=3 --retry-connrefused "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROME_VERSION}/linux64/chrome-linux64.zip" -O /tmp/chrome.zip \
+    && unzip /tmp/chrome.zip -d /opt \
     && ln -s /opt/chrome-linux64/chrome /usr/bin/google-chrome \
-    && rm chrome-linux64.zip
-
-# Verify Chrome installation
-RUN google-chrome --version
-
-# Install matching Chromedriver
-RUN CHROME_MAJOR=$(google-chrome --version | awk '{print $3}' | awk -F '.' '{print $1}') \
-    && CHROMEDRIVER_VERSION=$(wget -qO- "https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_$CHROME_MAJOR") \
-    && wget -q "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROMEDRIVER_VERSION}/linux64/chromedriver-linux64.zip" -O /tmp/chromedriver.zip \
+    && wget -q --tries=3 --retry-connrefused "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROME_VERSION}/linux64/chromedriver-linux64.zip" -O /tmp/chromedriver.zip \
     && unzip /tmp/chromedriver.zip -d /tmp/ \
     && mv /tmp/chromedriver-linux64/chromedriver /usr/local/bin/ \
     && chmod +x /usr/local/bin/chromedriver \
-    && rm -rf /tmp/chromedriver*
+    && rm -rf /tmp/chrome.zip /tmp/chromedriver*
+
+# Verify installations
+RUN google-chrome --version && chromedriver --version
 
 # Stage 2: Runtime - Security hardened
 FROM python:3.10-slim
