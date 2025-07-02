@@ -2,8 +2,9 @@
 FROM python:3.10-slim AS builder
 
 # Set build arguments with defaults
-ARG TZ=Europe/London
+ARG TZ=UTC
 ARG DEBIAN_FRONTEND=noninteractive
+ARG CHROME_VERSION=stable
 
 # System configuration - consolidated ENV
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -30,7 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libatk-bridge2.0-0 \
     libgdk-pixbuf2.0-0 \
     libgtk-3-0 \
-    libgbm-dev \
+    libgbm1 \
     libasound2 \
     libxss1 \
     libcups2 \
@@ -38,27 +39,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxtst6 \
     libxrender1 \
     libxi6 \
-    build-essential \
-    python3-dev \
+    fonts-liberation \
+    libappindicator3-1 \
+    libdrm2 \
+    libxcomposite1 \
+    libxkbcommon0 \
+    libxrandr2 \
+    xdg-utils \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Create shared memory directory
+# Create shared memory directory with proper permissions
 RUN mkdir -p /dev/shm && chmod 1777 /dev/shm
 
 # Install Chrome and Chromedriver using Chrome for Testing
-RUN CHROME_VERSION=$(wget -qO- https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_STABLE) \
-    && echo "Installing Chrome version: ${CHROME_VERSION}" \
-    && wget -q --tries=3 --retry-connrefused \
-       "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROME_VERSION}/linux64/chrome-linux64.zip" -O /tmp/chrome.zip \
-    && unzip /tmp/chrome.zip -d /opt \
-    && ln -s /opt/chrome-linux64/chrome /usr/bin/google-chrome \
-    && wget -q --tries=3 --retry-connrefused \
-       "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROME_VERSION}/linux64/chromedriver-linux64.zip" -O /tmp/chromedriver.zip \
-    && unzip /tmp/chromedriver.zip -d /tmp/ \
-    && mv /tmp/chromedriver-linux64/chromedriver /usr/local/bin/ \
+RUN wget -q -O /tmp/chrome.deb \
+    "https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-${CHROME_VERSION}_current_amd64.deb" \
+    && apt-get install -y --no-install-recommends /tmp/chrome.deb \
+    && rm /tmp/chrome.deb \
+    && wget -q -O /tmp/chromedriver.zip \
+    "https://chromedriver.storage.googleapis.com/$(google-chrome --version | cut -d ' ' -f3)/chromedriver_linux64.zip" \
+    && unzip /tmp/chromedriver.zip -d /usr/local/bin/ \
     && chmod +x /usr/local/bin/chromedriver \
-    && rm -rf /tmp/chrome.zip /tmp/chromedriver*
+    && rm /tmp/chromedriver.zip
 
 # Verify installations
 RUN google-chrome --version && chromedriver --version
@@ -74,7 +77,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libatk-bridge2.0-0 \
     libgdk-pixbuf2.0-0 \
     libgtk-3-0 \
-    libgbm-dev \
+    libgbm1 \
     libasound2 \
     libxss1 \
     libcups2 \
@@ -82,27 +85,31 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxtst6 \
     libxrender1 \
     libxi6 \
+    fonts-liberation \
+    libappindicator3-1 \
+    libdrm2 \
+    libxcomposite1 \
+    libxkbcommon0 \
+    libxrandr2 \
+    xdg-utils \
     xvfb \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Create shared memory directory
+# Create shared memory directory with proper permissions
 RUN mkdir -p /dev/shm && chmod 1777 /dev/shm
 
 # Copy only the minimal required files from builder
 COPY --from=builder /usr/bin/google-chrome /usr/bin/
 COPY --from=builder /usr/local/bin/chromedriver /usr/local/bin/
-COPY --from=builder /opt/chrome-linux64 /opt/chrome-linux64
 COPY --from=builder /usr/lib/x86_64-linux-gnu/ /usr/lib/x86_64-linux-gnu/
-
-# Copy only required library dependencies
 COPY --from=builder /usr/share/fonts /usr/share/fonts
 COPY --from=builder /etc/fonts /etc/fonts
 
 # Environment variables - security focused
 ENV CHROME_BIN=/usr/bin/google-chrome \
     CHROMEDRIVER_PATH=/usr/local/bin/chromedriver \
-    CHROME_USER_DATA_DIR="/tmp/chrome-profile" \
+    CHROME_USER_DATA_DIR=/tmp/chrome-profile \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -112,13 +119,12 @@ ENV CHROME_BIN=/usr/bin/google-chrome \
     SCREEN_HEIGHT=1080 \
     SCREEN_DEPTH=24 \
     DBUS_SESSION_BUS_ADDRESS=/dev/null \
-    CHROME_OPTS="--no-sandbox --disable-dev-shm-usage --disable-gpu --single-process --no-zygote --disable-setuid-sandbox --remote-debugging-port=0" \
     SE_SHM_SIZE="2g" \
     PATH="/home/scraper/.local/bin:$PATH"
 
 # Create secure non-root user environment
 RUN groupadd -r scraper && \
-    useradd -r -g scraper -d /app -s /sbin/nologin scraper && \
+    useradd -r -g scraper -d /app -s /bin/bash scraper && \
     mkdir -p /app && \
     chown -R scraper:scraper /app && \
     mkdir -p "${CHROME_USER_DATA_DIR}" && \
@@ -137,14 +143,16 @@ RUN pip install --user --no-cache-dir numpy==1.24.4 && \
 COPY --chown=scraper:scraper --chmod=644 . .
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s \
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
   CMD python -c "import selenium; from selenium import webdriver; \
   options = webdriver.ChromeOptions(); \
   options.add_argument('--headless=new'); \
   options.add_argument('--no-sandbox'); \
   options.add_argument('--disable-dev-shm-usage'); \
   driver = webdriver.Chrome(options=options); \
+  driver.get('about:blank'); \
+  assert '' == driver.title; \
   driver.quit()" || exit 1
 
-# Runtime command - using exec form
-CMD ["python", "hi_candidate_screenshot_job.py"]
+# Runtime command - using exec form with Xvfb
+CMD ["sh", "-c", "Xvfb :99 -screen 0 ${SCREEN_WIDTH}x${SCREEN_HEIGHT}x${SCREEN_DEPTH} -ac +extension RANDR & export DISPLAY=:99 && python hi_candidate_screenshot_job.py"]
