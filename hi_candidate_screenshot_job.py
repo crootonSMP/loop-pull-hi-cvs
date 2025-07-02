@@ -128,15 +128,10 @@ def verify_chrome_installation(config: Config) -> Tuple[bool, str]:
         return False, error_msg
 
 def setup_driver(config: Config) -> webdriver.Chrome:
-    """Configure and initialize Chrome WebDriver with robust options and retries"""
+    """Configure and initialize Chrome WebDriver with robust options"""
     for attempt in range(config.max_retries):
         try:
             logger.info(f"Initializing WebDriver (attempt {attempt + 1}/{config.max_retries})")
-            
-            # Verify Chrome installation first
-            is_verified, msg = verify_chrome_installation(config)
-            if not is_verified:
-                raise RuntimeError(f"Chrome verification failed: {msg}")
             
             chrome_options = Options()
             
@@ -147,11 +142,7 @@ def setup_driver(config: Config) -> webdriver.Chrome:
             chrome_options.add_argument(f'--window-size={config.screen_width},{config.screen_height}')
             chrome_options.add_argument('--disable-extensions')
             chrome_options.add_argument('--disable-setuid-sandbox')
-            chrome_options.add_argument('--disable-software-rasterizer')
             chrome_options.add_argument('--remote-debugging-port=9222')
-            chrome_options.add_argument('--disable-blink-features=AutomationControlled')
-            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            chrome_options.add_experimental_option('useAutomationExtension', False)
             
             # Headless configuration
             if config.headless:
@@ -170,7 +161,7 @@ def setup_driver(config: Config) -> webdriver.Chrome:
                 service_log_path=os.path.join(config.output_dir, 'chromedriver.log')
             )
             
-            # Verify driver is actually working
+            # Basic verification
             driver.get('about:blank')
             if not driver.title == '':
                 raise RuntimeError("Driver verification failed")
@@ -179,38 +170,12 @@ def setup_driver(config: Config) -> webdriver.Chrome:
             logger.info("WebDriver initialized successfully")
             return driver
             
-        except (WebDriverException, RuntimeError) as e:
+        except Exception as e:
             logger.error(f"Attempt {attempt + 1} failed: {str(e)}")
             if attempt == config.max_retries - 1:
                 logger.critical("Max retries reached for WebDriver initialization")
                 raise RuntimeError("Failed to initialize WebDriver after multiple attempts") from e
             time.sleep(config.retry_delay)
-        except Exception as e:
-            logger.error(f"Unexpected error during driver setup: {str(e)}")
-            raise RuntimeError("Critical error during WebDriver initialization") from e
-
-def cleanup_driver(driver: webdriver.Chrome) -> None:
-    """Properly cleanup WebDriver resources"""
-    if driver is None:
-        return
-        
-    try:
-        driver.quit()
-        logger.info("Browser terminated gracefully")
-    except Exception as e:
-        logger.warning(f"Error during driver quit: {str(e)}")
-        try:
-            # Fallback cleanup
-            driver.service.process.send_signal(signal.SIGTERM)
-            time.sleep(1)
-            if driver.service.process.poll() is None:
-                driver.service.process.kill()
-        except Exception as kill_error:
-            logger.error(f"Failed to kill driver process: {str(kill_error)}")
-    finally:
-        # Force cleanup of any remaining processes
-        subprocess.run(["pkill", "-9", "-f", "chrome"], stderr=subprocess.DEVNULL)
-        subprocess.run(["pkill", "-9", "-f", "chromedriver"], stderr=subprocess.DEVNULL)
 
 def main() -> int:
     driver = None
