@@ -54,6 +54,25 @@ RUN google-chrome --version && chromedriver --version
 # Stage 2: Runtime - Security hardened
 FROM python:3.10-slim
 
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglib2.0-0 \
+    libnss3 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libgdk-pixbuf2.0-0 \
+    libgtk-3-0 \
+    libgbm-dev \
+    libasound2 \
+    libxss1 \
+    libcups2 \
+    libdbus-glib-1-2 \
+    libxtst6 \
+    libxrender1 \
+    libxi6 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy only the minimal required files from builder
 COPY --from=builder /usr/bin/google-chrome /usr/bin/
 COPY --from=builder /usr/local/bin/chromedriver /usr/local/bin/
@@ -84,7 +103,7 @@ USER scraper
 
 # Install Python dependencies - optimized for caching
 COPY --chown=scraper:scraper requirements.txt .
-RUN pip install --user --no-cache-dir -r requirements.txt
+RUN pip install --user --no-cache-dir -r requirements.txt --ignore-installed retool-py
 
 # Copy application code - with explicit permissions
 COPY --chown=scraper:scraper --chmod=644 . .
