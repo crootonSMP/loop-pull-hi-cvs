@@ -43,10 +43,13 @@ RUN CHROME_VERSION=$(wget -qO- https://googlechromelabs.github.io/chrome-for-tes
     && ln -s /opt/chrome-linux64/chrome /usr/bin/google-chrome \
     && rm chrome-linux64.zip
 
-# Install ChromeDriver - using chrome-for-testing endpoint
-RUN CHROME_MAJOR=$(google-chrome --version | cut -d ' ' -f3 | cut -d '.' -f1) \
+# Verify Chrome installation
+RUN google-chrome --version
+
+# Install matching Chromedriver
+RUN CHROME_MAJOR=$(google-chrome --version | awk '{print $3}' | awk -F '.' '{print $1}') \
     && CHROMEDRIVER_VERSION=$(wget -qO- "https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_$CHROME_MAJOR") \
-    && wget -q "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/$CHROMEDRIVER_VERSION/linux64/chromedriver-linux64.zip" -O /tmp/chromedriver.zip \
+    && wget -q "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROMEDRIVER_VERSION}/linux64/chromedriver-linux64.zip" -O /tmp/chromedriver.zip \
     && unzip /tmp/chromedriver.zip -d /tmp/ \
     && mv /tmp/chromedriver-linux64/chromedriver /usr/local/bin/ \
     && chmod +x /usr/local/bin/chromedriver \
