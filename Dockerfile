@@ -69,5 +69,5 @@ RUN pip install --user --no-cache-dir -r requirements.txt
 # Copy application code
 COPY --chown=scraper:scraper . .
 
-# Set the entrypoint to run the new script
+# Set the entrypoint to run the script
 CMD ["python", "hi_cv_downloader.py"]
