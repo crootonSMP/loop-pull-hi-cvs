@@ -1,72 +1,108 @@
-# Use the official Python image as base
-FROM python:3.10-slim
+import os
+import time
+import logging
+import requests
+from io import BytesIO
+from datetime import datetime
 
-# Install Chrome and Chromedriver using Chrome for Testing
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget \
-    unzip \
-    && rm -rf /var/lib/apt/lists/*
+# Google Cloud
+from google.cloud import storage
+from google.cloud import secretmanager
+import google.auth
 
-# Install Chrome and Chromedriver from stable channel
-RUN CHROME_VERSION=$(wget -qO- https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_STABLE) \
-    && echo "Installing Chrome $CHROME_VERSION" \
-    && wget -q --tries=3 --retry-connrefused \
-       "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/$CHROME_VERSION/linux64/chrome-linux64.zip" -O /tmp/chrome.zip \
-    && unzip /tmp/chrome.zip -d /opt \
-    && ln -s /opt/chrome-linux64/chrome /usr/bin/google-chrome \
-    && wget -q --tries=3 --retry-connrefused \
-       "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/$CHROME_VERSION/linux64/chromedriver-linux64.zip" -O /tmp/chromedriver.zip \
-    && unzip /tmp/chromedriver.zip -d /tmp/ \
-    && mv /tmp/chromedriver-linux64/chromedriver /usr/local/bin/ \
-    && chmod +x /usr/local/bin/chromedriver \
-    && rm -rf /tmp/chrome.zip /tmp/chromedriver*
+# Load environment variables
+from dotenv import load_dotenv  # Added import for load_dotenv
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libglib2.0-0 \
-    libnss3 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libgdk-pixbuf2.0-0 \
-    libgtk-3-0 \
-    libgbm1 \
-    libasound2 \
-    libxss1 \
-    libcups2 \
-    libdbus-glib-1-2 \
-    libxtst6 \
-    libxrender1 \
-    libxi6 \
-    xvfb \
-    fonts-liberation \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Logging Setup
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
-# Configure shared memory
-RUN mkdir -p /dev/shm && chmod 1777 /dev/shm
+# Google Cloud Clients
+storage_client = storage.Client()
+secret_client = secretmanager.SecretManagerServiceClient()
 
-# Environment variables
-ENV CHROME_BIN=/usr/bin/google-chrome \
-    CHROMEDRIVER_PATH=/usr/local/bin/chromedriver \
-    DISPLAY=:99 \
-    SCREEN_WIDTH=1920 \
-    SCREEN_HEIGHT=1080 \
-    SE_SHM_SIZE="2g"
+def get_project_id():
+    """Resolve GCP project from ADC"""
+    _, project_id = google.auth.default()
+    if not project_id:
+        raise RuntimeError("Could not determine GCP Project ID")
+    return project_id
 
-# Create non-root user
-RUN groupadd -r scraper && \
-    useradd -r -g scraper -d /app -s /bin/bash scraper && \
-    mkdir -p /app && \
-    chown -R scraper:scraper /app
+GCP_PROJECT_ID = get_project_id()
 
-WORKDIR /app
-USER scraper
+def get_secret(secret_id: str) -> str:
+    """Fetch secret from Secret Manager"""
+    name = f"projects/{GCP_PROJECT_ID}/secrets/{secret_id}/versions/latest"
+    payload = secret_client.access_secret_version(request={"name": name}).payload.data
+    return payload.decode("utf-8").strip()
 
-# Install Python dependencies
-COPY --chown=scraper:scraper requirements.txt .
-RUN pip install --user --no-cache-dir -r requirements.txt
+def upload_file_to_gcs(file_content: BytesIO, bucket_name: str, destination_blob_name: str) -> bool:
+    """Upload a file (e.g., CV) to GCS"""
+    try:
+        bucket = storage_client.bucket(bucket_name)
+        blob = bucket.blob(destination_blob_name)
+        file_content.seek(0)
+        # Set content type based on file (default to PDF, adjust later)
+        blob.upload_from_file(file_content, content_type='application/pdf')
+        logger.info(f"Uploaded file to: gs://{bucket_name}/{destination_blob_name}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to upload file to GCS: {e}")
+        return False
 
-# Copy application code
-COPY --chown=scraper:scraper . .
+def download_cv(cv_id: int) -> tuple[str, BytesIO]:
+    """Download a CV using the API"""
+    api_key = get_secret("CV_DOWNLOAD_API_KEY")
+    
+    # Step 1: Fetch CV metadata
+    metadata_url = "https://partnersapi.applygateway.com/api/Candidate/CandidateCombination"
+    params = {
+        "buyerId": "1061",
+        "CvId": cv_id,
+        "UserId": "5414048",
+        "loggedInBuyer": "1061"
+    }
+    try:
+        response = requests.get(metadata_url, params=params, timeout=30)
+        response.raise_for_status()
+        metadata = response.json()
+        file_name = metadata["data"]["fileName"]
+        cv_file_name = metadata["data"]["cvFileName"]  # e.g., "James-Mason-5620275.pdf"
+        logger.info(f"Retrieved metadata for CV {cv_id}: {cv_file_name}")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to fetch CV metadata for {cv_id}: {e}")
+        return None, None
 
-CMD ["python", "hi_cv_downloader.py"]
+    # Step 2: Download CV
+    download_url = "https://cvfilemanager.applygateway.com/v1/cv/download"
+    params = {
+        "apiKey": api_key,
+        "fileName": file_name
+    }
+    try:
+        response = requests.get(download_url, params=params, timeout=30, stream=True)
+        response.raise_for_status()
+        file_content = BytesIO(response.content)
+        logger.info(f"Downloaded CV for {cv_id}")
+        return cv_file_name, file_content
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to download CV for {cv_id}: {e}")
+        return None, None
+
+def main():
+    load_dotenv()  # Load environment variables
+    bucket_name = "recruitment-engine-cvs-sp-260625"
+    cv_ids = [5620275]  # Proof-of-concept with one CV
+
+    for cv_id in cv_ids:
+        cv_file_name, file_content = download_cv(cv_id)
+        if cv_file_name and file_content:
+            destination_blob_name = f"cvs/{cv_file_name}"
+            if upload_file_to_gcs(file_content, bucket_name, destination_blob_name):
+                logger.info(f"Successfully processed CV {cv_id}")
+            time.sleep(1)  # Respect server load with 1-second delay
+
+    logger.info("Job completed")
+
+if __name__ == "__main__":
+    main()
