@@ -37,7 +37,7 @@ class Config:
     explicit_wait: int = int(os.getenv('EXPLICIT_WAIT', '120'))  # Increased to 2 minutes
     chrome_driver_path: str = os.getenv('CHROMEDRIVER_PATH', '/usr/local/bin/chromedriver')
     screenshot_bucket: str = os.getenv('DEBUG_SCREENSHOT_BUCKET', 'recruitment-engine-cvs-sp-260625')
-    cv_bucket: str = os.getenv('CV_BUCKET', 'recruitment-engine-cvs-sp-260625') 
+    cv_bucket: str = os.getenv('CV_BUCKET', 'recruitment-engine-cvs-sp-260625')  # Updated to match your bucket
 
     def validate(self):
         if not all([self.username, self.password, self.api_key]):
@@ -112,7 +112,7 @@ def upload_file_to_gcs(config: Config, file_content: bytes, blob_name: str) -> b
     """Upload CV file to GCS"""
     try:
         storage_client = storage.Client()
-        bucket = storage_client.bucket(config.cv_bucket)
+        bucket = storage_client.bucket(config.cv_bucket)  # Uses recruitment-engine-cvs-sp-260625
         blob = bucket.blob(blob_name)
         with BytesIO(file_content) as file_stream:
             blob.upload_from_file(file_stream, content_type='application/pdf')
@@ -252,7 +252,7 @@ def get_yesterdays_cvs(driver: webdriver.Chrome, config: Config, buyer_id: str =
                     date_text = cells[0].text.strip()  # "2025-06-29 3:02 pm"
                     if not date_text.startswith(yesterday):  # Filter for yesterday
                         continue
-                    candidate_text = cells[6].text.strip()  
+                    candidate_text = cells[6].text.strip()  # "Serah Adelakun [email protected] +44 7366687182"
                     names = candidate_text.split()[0:2]  # Split to get first and last name
                     first_name = names[0] if len(names) > 0 else ""
                     last_name = names[1] if len(names) > 1 else ""
