@@ -11,6 +11,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException  # ✅ FIXED
 from dotenv import load_dotenv
 import pandas as pd
 
@@ -24,7 +25,7 @@ class Config:
     password: str = os.getenv('HIRE_PASSWORD', '')
     headless: bool = os.getenv('HEADLESS', 'true').lower() == 'true'
     implicit_wait: int = int(os.getenv('IMPLICIT_WAIT', '10'))
-    explicit_wait: int = int(os.getenv('EXPLICIT_WAIT', '30'))  # Increased timeout
+    explicit_wait: int = int(os.getenv('EXPLICIT_WAIT', '30'))
     output_dir: str = os.getenv('OUTPUT_DIR', 'output')
     chrome_driver_path: str = os.getenv('CHROMEDRIVER_PATH', '/usr/local/bin/chromedriver')
     screen_width: int = int(os.getenv('SCREEN_WIDTH', '1920'))
@@ -99,7 +100,7 @@ def setup_driver(config: Config) -> webdriver.Chrome:
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument(f'--window-size={config.screen_width},{config.screen_height}')
-    chrome_options.add_argument('--user-data-dir=/tmp/chrome-profile')  # Critical fix
+    chrome_options.add_argument('--user-data-dir=/tmp/chrome-profile')
     chrome_options.add_argument('--disable-application-cache')
     
     # Headless configuration
@@ -139,6 +140,7 @@ def login_to_hireintelligence(driver: webdriver.Chrome, config: Config) -> None:
         driver.get("https://clients.hireintelligence.io/login")
         WebDriverWait(driver, config.explicit_wait).until(
             EC.presence_of_element_located((By.TAG_NAME, "body"))
+        )  # ✅ FIXED: closing parenthesis
         
         iframes = WebDriverWait(driver, config.explicit_wait).until(
             EC.presence_of_all_elements_located((By.TAG_NAME, "iframe")))
@@ -158,7 +160,7 @@ def login_to_hireintelligence(driver: webdriver.Chrome, config: Config) -> None:
                             return driver.find_element(By.CSS_SELECTOR, selector)
                         except:
                             continue
-                    raise EC.NoSuchElementException("No matching elements found")
+                    raise NoSuchElementException("No matching elements found")  # ✅ FIXED
                 
                 email_field = find_with_fallback(
                     "input[name='email']",
@@ -290,7 +292,6 @@ def main() -> int:
                 logger.info("Browser terminated")
             except Exception as e:
                 logger.warning(f"Error during driver quit: {str(e)}")
-            # Force cleanup if needed
             subprocess.run(["pkill", "-f", "chrome"], stderr=subprocess.DEVNULL)
 
 if __name__ == "__main__":
