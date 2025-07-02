@@ -18,14 +18,20 @@ load_dotenv()
 
 # Configuration
 @dataclass
+@dataclass
 class Config:
-    username: str = os.getenv('HI_USERNAME', '')
-    password: str = os.getenv('HI_PASSWORD', '')
+    username: str = os.getenv('HIRE_USERNAME', '')
+    password: str = os.getenv('HIRE_PASSWORD', '')  # This will come from the secret
     headless: bool = os.getenv('HEADLESS', 'true').lower() == 'true'
-    implicit_wait: int = 10
-    explicit_wait: int = 20
-    output_dir: str = "output"
-    chrome_driver_path: str = "/usr/local/bin/chromedriver"
+    implicit_wait: int = int(os.getenv('IMPLICIT_WAIT', '10'))
+    explicit_wait: int = int(os.getenv('EXPLICIT_WAIT', '20'))
+    output_dir: str = os.getenv('OUTPUT_DIR', 'output')
+    chrome_driver_path: str = os.getenv('CHROMEDRIVER_PATH', '/usr/local/bin/chromedriver')
+
+    def validate(self):
+        if not self.username or not self.password:
+            raise ValueError("Missing credentials in environment variables")
+        return self
 
 # Initialize logging
 logging.basicConfig(
@@ -236,10 +242,7 @@ def extract_data_from_retool(driver: webdriver.Chrome, config: Config) -> pd.Dat
 def main() -> int:
     """Main execution function with proper error handling"""
     try:
-        config = Config()
-        
-        if not config.username or not config.password:
-            raise ValueError("Missing credentials in environment variables")
+        config = Config().validate()  # This will validate credentials
         
         logger.info("Starting HireIntelligence scraper")
         driver = setup_driver(config)
@@ -249,6 +252,15 @@ def main() -> int:
         
         logger.info("Scraping completed successfully")
         return 0
+        
+    except Exception as e:
+        logger.critical(f"Script failed: {str(e)}", exc_info=True)
+        return 1
+    finally:
+        if 'driver' in locals():
+            driver.quit()
+            logger.info("Browser terminated")
+
         
     except Exception as e:
         logger.critical(f"Script failed: {str(e)}", exc_info=True)
