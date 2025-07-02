@@ -3,11 +3,11 @@
 set -e  # Exit on error
 
 # Define common variables
-JOB_TAG="v03-03" # Update your JOB_TAG if you retry the deploy
+JOB_TAG="v10-01" # Update your JOB_TAG if you retry the deploy
 JOB_NAME="daily-hire-screenshot-job-${JOB_TAG}"
 IMAGE_NAME="europe-west2-docker.pkg.dev/intelligent-recruitment-engine/recruitment-engine-repo/${JOB_NAME}:${JOB_TAG}"
 REGION="europe-west2"
-MEMORY="1Gi"
+MEMORY="2Gi"
 CPU="1"
 TASK_TIMEOUT="1800"
 DB_CONNECTION_INSTANCE="intelligent-recruitment-engine:europe-west2:recruitment-db-main"
