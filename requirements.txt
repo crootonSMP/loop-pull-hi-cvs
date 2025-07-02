@@ -1,29 +1,20 @@
-# Core scraping & automation
+# Core dependencies
+numpy==1.24.4  # Specific version compatible with pandas 2.0.3
+pandas==2.0.3
+
+# Other dependencies remain the same
 selenium==4.9.1
 webdriver-manager==3.8.6
-
-# HTTP requests & API interactions
 requests==2.31.0
 urllib3==2.0.4
-
-# Data handling & export
-pandas==2.0.3
 openpyxl==3.1.2
 python-dotenv==1.0.0
-
-# Browser automation helpers
 selenium-wire==5.1.0
 browsermob-proxy==0.8.0
-
-# Utility libraries
 beautifulsoup4==4.12.2
 lxml==4.9.3
 tqdm==4.65.0
-
-# Date/time handling
 python-dateutil==2.8.2
 pytz==2023.3
-
-# Error handling & retries
 tenacity==8.2.3
 backoff==2.2.1
