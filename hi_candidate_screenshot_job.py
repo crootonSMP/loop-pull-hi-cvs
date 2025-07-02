@@ -29,20 +29,74 @@ from PIL import Image
 # Load environment variables
 load_dotenv()
 
-# [Keep your existing Config class and setup_logging function...]
+# Configuration
+@dataclass
+class Config:
+    username: str = os.getenv('HIRE_USERNAME', '')
+    password: str = os.getenv('HIRE_PASSWORD', '')
+    headless: bool = os.getenv('HEADLESS', 'true').lower() == 'true'
+    implicit_wait: int = int(os.getenv('IMPLICIT_WAIT', '10'))
+    explicit_wait: int = int(os.getenv('EXPLICIT_WAIT', '30'))
+    output_dir: str = os.getenv('OUTPUT_DIR', 'output')
+    chrome_driver_path: str = os.getenv('CHROMEDRIVER_PATH', '/usr/local/bin/chromedriver')
+    screen_width: int = int(os.getenv('SCREEN_WIDTH', '1920'))
+    screen_height: int = int(os.getenv('SCREEN_HEIGHT', '1080'))
+    max_retries: int = int(os.getenv('MAX_RETRIES', '3'))
+    retry_delay: int = int(os.getenv('RETRY_DELAY', '5'))
+
+    def validate(self):
+        """Validate configuration and credentials"""
+        if not self.username or not self.password:
+            raise ValueError("Missing credentials in environment variables")
+        os.makedirs(self.output_dir, exist_ok=True)
+        if not os.path.exists(self.chrome_driver_path):
+            raise FileNotFoundError(f"Chromedriver not found at {self.chrome_driver_path}")
+        return self
+
+# Initialize logging
+def setup_logging() -> logging.Logger:
+    """Configure logging with file rotation and proper formatting"""
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    # File handler with rotation
+    file_handler = logging.FileHandler('scraper.log')
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(logging.DEBUG)
+    
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    console_handler.setLevel(logging.INFO)
+    
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    return logger
+
+logger = setup_logging()
 
 def upload_to_gcs(bucket_name: str, image_data: bytes, destination_path: str) -> None:
     """Upload screenshot to Google Cloud Storage"""
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
-    blob = bucket.blob(destination_path)
-    
-    with BytesIO(image_data) as image_stream:
-        blob.upload_from_file(image_stream, content_type='image/png')
-    
-    logger.info(f"Screenshot uploaded to gs://{bucket_name}/{destination_path}")
+    try:
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(bucket_name)
+        blob = bucket.blob(destination_path)
+        
+        with BytesIO(image_data) as image_stream:
+            blob.upload_from_file(image_stream, content_type='image/png')
+        
+        logger.info(f"Screenshot uploaded to gs://{bucket_name}/{destination_path}")
+    except Exception as e:
+        logger.error(f"Failed to upload screenshot: {str(e)}")
+        raise
 
-def capture_screenshot(driver: webdriver.Chrome, url: str, description: str) -> bytes:
+def capture_screenshot(driver: webdriver.Chrome, url: str) -> bytes:
     """Navigate to URL and capture screenshot"""
     try:
         logger.info(f"Navigating to {url}")
@@ -74,40 +128,60 @@ def capture_screenshot(driver: webdriver.Chrome, url: str, description: str) -> 
         logger.error(f"Failed to capture {url}: {str(e)}")
         raise
 
+def setup_driver(config: Config) -> webdriver.Chrome:
+    """Configure and initialize Chrome WebDriver"""
+    chrome_options = Options()
+    chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument('--disable-dev-shm-usage')
+    chrome_options.add_argument('--disable-gpu')
+    chrome_options.add_argument(f'--window-size={config.screen_width},{config.screen_height}')
+    
+    if config.headless:
+        chrome_options.add_argument('--headless=new')
+    
+    service = Service(executable_path=config.chrome_driver_path)
+    return webdriver.Chrome(service=service, options=chrome_options)
+
+def cleanup_driver(driver: webdriver.Chrome) -> None:
+    """Properly cleanup WebDriver resources"""
+    if driver:
+        try:
+            driver.quit()
+            logger.info("Browser terminated gracefully")
+        except Exception as e:
+            logger.warning(f"Error during driver quit: {str(e)}")
+
 def main() -> int:
     driver = None
     try:
         config = Config().validate()
-        logger.info(f"Starting job with configuration: {config}")
-        
-        driver = setup_driver(config)
         bucket_name = "recruitment-engine-cvs-sp-260625"
         
-        # List of URLs and their descriptions
-        pages = [
-            ("https://clients.hireintelligence.io/login", "jobs_dashboard"),
-            ("https://clients.hireintelligence.io/multi-candidate-admin", "multi_candidate_admin")
+        driver = setup_driver(config)
+        
+        # List of URLs to capture
+        urls = [
+            "https://clients.hireintelligence.io/login",
+            "https://clients.hireintelligence.io/multi-candidate-admin"
         ]
         
-        for url, description in pages:
+        for url in urls:
             try:
-                screenshot = capture_screenshot(driver, url, description)
+                screenshot = capture_screenshot(driver, url)
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"{description}_{timestamp}_{uuid.uuid4().hex[:6]}.png"
+                description = "login" if "login" in url else "candidate_admin"
+                filename = f"{description}_{timestamp}.png"
                 upload_to_gcs(bucket_name, screenshot, f"screenshots/{filename}")
             except Exception as e:
-                logger.error(f"Failed processing {url}: {str(e)}")
+                logger.error(f"Skipping {url} due to error: {str(e)}")
                 continue
         
-        logger.info("Screenshot capture completed")
         return 0
-        
     except Exception as e:
         logger.critical(f"Job failed: {str(e)}", exc_info=True)
         return 1
     finally:
-        if driver:
-            cleanup_driver(driver)
+        cleanup_driver(driver)
 
 if __name__ == "__main__":
     exit(main())
