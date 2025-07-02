@@ -177,6 +177,30 @@ def setup_driver(config: Config) -> webdriver.Chrome:
                 raise RuntimeError("Failed to initialize WebDriver after multiple attempts") from e
             time.sleep(config.retry_delay)
 
+def cleanup_driver(driver: webdriver.Chrome) -> None:
+    """Properly cleanup WebDriver resources"""
+    if driver is None:
+        return
+        
+    try:
+        driver.quit()
+        logger.info("Browser terminated gracefully")
+    except Exception as e:
+        logger.warning(f"Error during driver quit: {str(e)}")
+        try:
+            # Fallback cleanup
+            if hasattr(driver, 'service') and driver.service.process:
+                driver.service.process.send_signal(signal.SIGTERM)
+                time.sleep(1)
+                if driver.service.process.poll() is None:
+                    driver.service.process.kill()
+        except Exception as kill_error:
+            logger.error(f"Failed to kill driver process: {str(kill_error)}")
+    finally:
+        # Force cleanup of any remaining processes
+        subprocess.run(["pkill", "-9", "-f", "chrome"], stderr=subprocess.DEVNULL)
+        subprocess.run(["pkill", "-9", "-f", "chromedriver"], stderr=subprocess.DEVNULL)
+
 def main() -> int:
     driver = None
     try:
