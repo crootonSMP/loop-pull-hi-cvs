@@ -17,7 +17,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import (NoSuchElementException,
                                       WebDriverException,
-                                      TimeoutException)
+                                      TimeoutException,
+                                      ElementNotInteractableException) # New import for specific exception
 
 # Google Cloud and other imports
 from google.cloud import storage
@@ -62,7 +63,8 @@ def setup_logging() -> logging.Logger:
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    # File handler with rotation (might not be accessible in some Cloud Run configs)
+    # File handler with rotation (may not be accessible in some Cloud Run configs)
+    # Keeping it as it might be useful if local testing involves file logging.
     file_handler = logging.FileHandler('scraper.log')
     file_handler.setFormatter(formatter)
     file_handler.setLevel(logging.DEBUG)
@@ -93,27 +95,26 @@ def resource_manager(resource_name: str):
 def verify_chrome_installation(config: Config) -> tuple[bool, str]:
     """Verify Chrome and Chromedriver are properly installed and compatible"""
     try:
-        with resource_manager("Chrome version check"):
-            chrome_version_output = subprocess.run(
-                ["google-chrome", "--version"],
-                check=True,
-                capture_output=True,
-                text=True
-            ).stdout.strip()
+        # Use subprocess.run with a timeout for robustness
+        chrome_version_process = subprocess.run(
+            ["google-chrome", "--version"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10 # Add a timeout
+        )
+        chrome_version = chrome_version_process.stdout.strip().split()[-1]
 
-            chrome_version = chrome_version_output.split()[-1]
+        driver_version_process = subprocess.run(
+            [config.chrome_driver_path, "--version"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10 # Add a timeout
+        )
+        driver_version = driver_version_process.stdout.strip().split()[1]
 
-        with resource_manager("Chromedriver version check"):
-            driver_version_output = subprocess.run(
-                [config.chrome_driver_path, "--version"],
-                check=True,
-                capture_output=True,
-                text=True
-            ).stdout.strip()
-
-            driver_version = driver_version_output.split()[1]
-
-        # Verify version compatibility
+        # Verify major version compatibility
         if chrome_version.split('.')[0] != driver_version.split('.')[0]:
             msg = (f"Version mismatch: Chrome {chrome_version} vs "
                   f"Chromedriver {driver_version}")
@@ -123,8 +124,12 @@ def verify_chrome_installation(config: Config) -> tuple[bool, str]:
         logger.info(f"Verified Chrome {chrome_version} and Chromedriver {driver_version}")
         return True, "Version check passed"
 
+    except subprocess.TimeoutExpired:
+        error_msg = "Command timed out during Chrome/Chromedriver version check."
+        logger.error(error_msg)
+        return False, error_msg
     except subprocess.CalledProcessError as e:
-        error_msg = f"Process execution failed: {e.stderr.strip()}"
+        error_msg = f"Process execution failed during version check: {e.stderr.strip()}"
         logger.error(error_msg)
         return False, error_msg
     except Exception as e:
@@ -156,14 +161,13 @@ def setup_driver(config: Config) -> webdriver.Chrome:
             # Configure service with error handling
             service = Service(
                 executable_path=config.chrome_driver_path,
-                service_args=['--verbose'] # Keep verbose for more detailed chromedriver logs
+                service_args=['--verbose', '--log-path=chromedriver.log'] # Log Chromedriver output to a file
             )
 
             # Additional stability parameters
             driver = webdriver.Chrome(
                 service=service,
-                options=chrome_options,
-                # service_log_path=os.path.join(config.output_dir, 'chromedriver.log') # May not be persistent in Cloud Run
+                options=chrome_options
             )
 
             # Basic verification
@@ -192,19 +196,12 @@ def cleanup_driver(driver: webdriver.Chrome) -> None:
         logger.info("Browser terminated gracefully")
     except Exception as e:
         logger.warning(f"Error during driver quit: {str(e)}")
+        # Fallback to force kill processes
         try:
-            # Fallback cleanup
-            if hasattr(driver, 'service') and driver.service.process:
-                driver.service.process.send_signal(signal.SIGTERM)
-                time.sleep(1)
-                if driver.service.process.poll() is None:
-                    driver.service.process.kill()
+            subprocess.run(["pkill", "-9", "-f", "chrome"], check=False, stderr=subprocess.DEVNULL)
+            subprocess.run(["pkill", "-9", "-f", "chromedriver"], check=False, stderr=subprocess.DEVNULL)
         except Exception as kill_error:
-            logger.error(f"Failed to kill driver process: {str(kill_error)}")
-    finally:
-        # Force cleanup of any remaining processes
-        subprocess.run(["pkill", "-9", "-f", "chrome"], stderr=subprocess.DEVNULL)
-        subprocess.run(["pkill", "-9", "-f", "chromedriver"], stderr=subprocess.DEVNULL)
+            logger.error(f"Failed to kill browser/chromedriver processes: {str(kill_error)}")
 
 def upload_screenshot_to_gcs(bucket_name: str, image_data: bytes, destination_blob_name: str) -> None:
     """Uploads bytes data (screenshot) to the Google Cloud Storage bucket."""
@@ -215,8 +212,13 @@ def upload_screenshot_to_gcs(bucket_name: str, image_data: bytes, destination_bl
 
         blob.upload_from_file(BytesIO(image_data), content_type='image/png')
         logger.info(f"Screenshot uploaded to gs://{bucket_name}/{destination_blob_name}.")
+
+        # Optional: Verify upload by checking if the blob exists (adds latency)
+        # if not blob.exists():
+        #     raise RuntimeError(f"GCS blob {destination_blob_name} does not exist after upload attempt.")
+
     except Exception as e:
-        logger.error(f"Failed to upload screenshot to GCS bucket {bucket_name}: {str(e)}")
+        logger.error(f"Failed to upload screenshot to GCS bucket {bucket_name}: {str(e)}", exc_info=True)
         raise
 
 def login_to_hireintelligence(driver: webdriver.Chrome, config: Config):
@@ -225,42 +227,51 @@ def login_to_hireintelligence(driver: webdriver.Chrome, config: Config):
     driver.get("https://clients.hireintelligence.io/login")
 
     try:
-        # Wait for the email input field to be present
+        # Wait for the email input field to be present and visible
         email_field = WebDriverWait(driver, config.explicit_wait).until(
-            EC.presence_of_element_located((By.NAME, "email"))
+            EC.visibility_of_element_located((By.NAME, "email"))
         )
-        logger.info("Login page loaded. Entering credentials.")
+        logger.info("Login page loaded. Attempting to enter credentials.")
 
         # Locate password field and login button
         password_field = driver.find_element(By.NAME, "password")
-        login_button = driver.find_element(By.CSS_SELECTOR, "button[type='submit']") # More robust selector based on common button types
+        # Wait for the login button to be clickable
+        login_button = WebDriverWait(driver, config.explicit_wait).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']"))
+        )
 
         email_field.send_keys(config.username)
         password_field.send_keys(config.password)
         
-        # Click the login button
         login_button.click()
 
         logger.info("Login button clicked. Waiting for dashboard URL to load.")
-        # Wait for the URL to change to the main dashboard after login
+        # Wait for the URL to change to the main dashboard AFTER login
         WebDriverWait(driver, config.explicit_wait).until(
             EC.url_contains("https://clients.hireintelligence.io/")
         )
         logger.info("Successfully logged into Hire Intelligence.")
 
     except TimeoutException as e:
-        logger.error(f"Timeout while waiting for login elements or dashboard after login: {e}")
-        # Optionally take a screenshot here for debugging login issues
-        # take_and_upload_screenshot(driver, config, "login_timeout_debug")
-        raise
+        logger.error(f"Timeout during login: {e}")
+        take_and_upload_screenshot(driver, config, "login_timeout_debug_error")
+        raise RuntimeError("Login failed due to timeout. See screenshot for details.") from e
     except NoSuchElementException as e:
-        logger.error(f"Could not find login elements (email, password, or login button): {e}")
-        # Optionally take a screenshot here for debugging missing elements
-        # take_and_upload_screenshot(driver, config, "login_elements_missing_debug")
-        raise
+        logger.error(f"Login element not found: {e}")
+        take_and_upload_screenshot(driver, config, "login_element_missing_debug_error")
+        raise RuntimeError("Login failed: A required element was not found. See screenshot.") from e
+    except ElementNotInteractableException as e:
+        logger.error(f"Element not interactable during login: {e}")
+        take_and_upload_screenshot(driver, config, "login_not_interactable_debug_error")
+        raise RuntimeError("Login failed: Element not interactable. See screenshot.") from e
+    except WebDriverException as e:
+        logger.error(f"WebDriver error during login: {e}")
+        take_and_upload_screenshot(driver, config, "login_webdriver_error")
+        raise RuntimeError("Login failed due to WebDriver issue. See screenshot.") from e
     except Exception as e:
         logger.critical(f"An unexpected error occurred during login: {e}", exc_info=True)
-        raise
+        take_and_upload_screenshot(driver, config, "login_unexpected_error")
+        raise RuntimeError("Login failed due to an unexpected error. See screenshot and logs.") from e
 
 def take_and_upload_screenshot(driver: webdriver.Chrome, config: Config, page_label: str):
     """Takes a screenshot and uploads it to GCS."""
@@ -268,15 +279,19 @@ def take_and_upload_screenshot(driver: webdriver.Chrome, config: Config, page_la
     screenshot_bytes = driver.get_screenshot_as_png()
     gcs_blob_name = f"screenshots/{page_label}_{timestamp}.png" # Organize in 'screenshots' folder in GCS
 
-    logger.info(f"Uploading screenshot for {page_label} to GCS bucket {config.screenshot_bucket} as {gcs_blob_name}")
-    upload_screenshot_to_gcs(config.screenshot_bucket, screenshot_bytes, gcs_blob_name)
-    logger.info(f"Screenshot for {page_label} uploaded successfully.")
-
+    logger.info(f"Attempting to upload screenshot for {page_label} to GCS bucket {config.screenshot_bucket} as {gcs_blob_name}")
+    try:
+        upload_screenshot_to_gcs(config.screenshot_bucket, screenshot_bytes, gcs_blob_name)
+        logger.info(f"Screenshot for {page_label} uploaded successfully.")
+    except Exception as e:
+        logger.error(f"Failed to upload screenshot '{page_label}': {e}")
+        # Re-raise to ensure the job fails if screenshot upload is critical
+        raise
 
 def main() -> int:
     driver = None
     try:
-        config = Config().validate() # Initialize and validate config here
+        config = Config().validate()
         logger.info(f"Starting scraping job with configuration: {config}")
 
         # Verify Chrome installation before starting the driver
@@ -288,16 +303,14 @@ def main() -> int:
         driver = setup_driver(config)
 
         # 1. Log in to Hire Intelligence
+        # This function now has more specific error handling and takes screenshots on failure
         login_to_hireintelligence(driver, config)
 
         # 2. Wait for job count on home page and take screenshot
         logger.info("Currently on dashboard. Waiting for job count element to appear.")
         try:
-            # Wait for text content that matches the pattern "X Jobs Listed"
-            # This XPath looks for any element containing the text "Jobs Listed"
-            # It's important to understand the actual HTML structure. If the number
-            # is part of a span or div with a specific class, target that.
-            # For now, a generic contains() check on all text is used.
+            # Reconfirming a generic XPath, but strongly recommend inspecting HTML for a better selector
+            # e.g., By.ID, By.CLASS_NAME, or a more precise XPath if text is dynamic
             WebDriverWait(driver, config.explicit_wait).until(
                 EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Jobs Listed')]"))
             )
@@ -305,10 +318,10 @@ def main() -> int:
             take_and_upload_screenshot(driver, config, "hireintelligence_home")
         except TimeoutException as e:
             logger.warning(f"Timeout while waiting for 'Jobs Listed' text on the dashboard: {e}. Taking screenshot anyway.")
-            take_and_upload_screenshot(driver, config, "hireintelligence_home_no_job_count") # Take anyway with a different name
+            take_and_upload_screenshot(driver, config, "hireintelligence_home_no_job_count")
         except Exception as e:
             logger.error(f"Error while waiting for job count: {e}", exc_info=True)
-            take_and_upload_screenshot(driver, config, "hireintelligence_home_error") # Take screenshot on error too
+            take_and_upload_screenshot(driver, config, "hireintelligence_home_error")
 
 
         # 3. Go to multi-candidate-admin page and take screenshot
