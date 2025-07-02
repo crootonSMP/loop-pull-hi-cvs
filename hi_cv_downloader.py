@@ -257,58 +257,34 @@ def get_yesterdays_cvs(driver: webdriver.Chrome, config: Config, buyer_id: str =
             EC.presence_of_element_located((By.CSS_SELECTOR, "table tr"))
         )
 
-        rows = driver.find_elements(By.CSS_SELECTOR, "table tr")
-        for row in rows[1:]:  # skip header
-            try:
-                cells = row.find_elements(By.TAG_NAME, "td")
-                if len(cells) < 7:
-                    continue
+        try:
+    cells = row.find_elements(By.TAG_NAME, "td")
+    if len(cells) < 7:
+        continue
 
-                # Extract name
-                candidate_text = cells[6].text.strip()
-                names = candidate_text.split()[0:2]
-                first_name = names[0] if len(names) > 0 else ""
-                last_name = names[1] if len(names) > 1 else ""
+    candidate_text = cells[6].text.strip()
+    names = candidate_text.split()[0:2]
+    first_name = names[0] if len(names) > 0 else ""
+    last_name = names[1] if len(names) > 1 else ""
 
-                # Find the download button
-                download_button = cells[-1].find_element(By.TAG_NAME, "button")
+    # Try scraping embedded user_id and cv_id from HTML
+    html = row.get_attribute("outerHTML")
+    match = re.search(r"downloadCV\('(\d+)','(\d+)'\)", html)
+    if match:
+        user_id, cv_id = match.groups()
+        cv_list.append({
+            "first_name": first_name,
+            "last_name": last_name,
+            "user_id": user_id,
+            "cv_id": cv_id,
+            "buyer_id": buyer_id
+        })
+        logger.debug(f"✅ Found CV: {first_name} {last_name} (UserID: {user_id}, CvID: {cv_id})")
+    else:
+        logger.warning(f"❌ No downloadCV(...) JS string found in row HTML")
 
-                # Try extracting from attached JS function
-                js = """
-                const btn = arguments[0];
-                const fnStr = btn.getAttribute('onclick') || btn.onclick?.toString();
-                return fnStr;
-                """
-                onclick_str = driver.execute_script(js, download_button)
-
-                if not onclick_str:
-                    logger.warning("No onclick string found, skipping row")
-                    continue
-
-                match = re.search(r"downloadCV\('([^']+)','([^']+)'\)", onclick_str)
-                if match:
-                    user_id, cv_id = match.groups()
-                    cv_list.append({
-                        "first_name": first_name,
-                        "last_name": last_name,
-                        "user_id": user_id,
-                        "cv_id": cv_id,
-                        "buyer_id": buyer_id
-                    })
-                    logger.debug(f"✅ Found CV: {first_name} {last_name} (UserID: {user_id}, CvID: {cv_id})")
-                else:
-                    logger.warning(f"Could not extract IDs from onclick string: {onclick_str}")
-            except Exception as e:
-                logger.warning(f"Error processing CV row: {str(e)}")
-                continue
-
-        logger.info(f"Collected {len(cv_list)} CVs for {yesterday_str}")
-        return cv_list
-
-    except Exception as e:
-        logger.error(f"Failed to fetch CVs: {str(e)}")
-        upload_screenshot(driver, config, "cv_list_failed")
-        return []
+except Exception as e:
+    logger.warning(f"Error processing row: {str(e)}")
 
 def download_cv(config: Config, cv_data: Dict) -> Optional[Dict]:
     """Download a single CV using the API observed in the HAR file"""
