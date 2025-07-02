@@ -1,4 +1,33 @@
-google-cloud-storage==2.16.0
-google-auth==2.29.0
-requests==2.32.3
-selenium==4.34.0
+# Core scraping & automation
+selenium==4.9.1  # Modern version with improved iframe handling
+webdriver-manager==3.8.6  # Alternative chromedriver management
+
+# HTTP requests & API interactions
+requests==2.31.0
+urllib3==2.0.4  # Important for security updates
+
+# Data handling & export
+pandas==2.0.3  # For Excel/CSV export
+openpyxl==3.1.2  # Excel support
+python-dotenv==1.0.0  # Environment variable management
+
+# Browser automation helpers
+selenium-wire==5.1.0  # For proxy and request interception
+browsermob-proxy==0.8.0  # HAR file generation
+
+# Retool-specific helpers
+retool-py==0.2.1  # Unofficial Retool API client
+websocket-client==1.6.1  # For Retool's real-time updates
+
+# Utility libraries
+beautifulsoup4==4.12.2  # HTML parsing
+lxml==4.9.3  # Faster HTML parsing
+tqdm==4.65.0  # Progress bars
+
+# Date/time handling
+python-dateutil==2.8.2
+pytz==2023.3  # Timezone support
+
+# Error handling & retries
+tenacity==8.2.3  # For retry logic
+backoff==2.2.1  # Alternative retry pattern
