@@ -1,32 +1,31 @@
 #!/bin/bash
-set -e  # Exit on error
+set -e
 
-# Define common variables
-JOB_TAG="v6-11"  # Updated version
+# Automatically increment JOB_TAG based on the latest tag
+CURRENT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v7-0")
+IFS='-' read -r prefix number <<< "$CURRENT_TAG"
+NEW_NUMBER=$((number + 1))
+JOB_TAG="v7-${NEW_NUMBER}"
 JOB_NAME="x-daily-hire-screenshot-job-${JOB_TAG}"
 IMAGE_NAME="europe-west2-docker.pkg.dev/intelligent-recruitment-engine/recruitment-engine-repo/${JOB_NAME}:${JOB_TAG}"
 REGION="europe-west2"
-MEMORY="8Gi"  # Increased memory
+MEMORY="8Gi"
 CPU="2"
-TASK_TIMEOUT="1800s"  # Added 's' for seconds
+TASK_TIMEOUT="1800s"
 DB_CONNECTION_INSTANCE="intelligent-recruitment-engine:europe-west2:recruitment-db-main"
 
-# Step 1: Prepare workspace
 echo "Step 1: Preparing workspace..."
 cd ~/ || exit 1
 rm -rf loop-cvs
 git clone https://github.com/crootonSMP/loop-pull-hi-cvs.git loop-cvs || exit 1
 cd loop-cvs || exit 1
 
-# Step 2: Build and tag Docker image
 echo "Step 2: Building Docker image: ${IMAGE_NAME}"
 docker build --no-cache --memory 4g --shm-size 2g -t "${IMAGE_NAME}" . || exit 1
 
-# Step 3: Push Docker image to Artifact Registry
 echo "Step 3: Pushing Docker image: ${IMAGE_NAME}"
 docker push "${IMAGE_NAME}" || exit 1
 
-# Step 4: Deploy Cloud Run Job with proper secret handling
 echo "Step 4: Deploying Cloud Run Job: ${JOB_NAME}"
 gcloud run jobs deploy "${JOB_NAME}" \
   --region="${REGION}" \
