@@ -105,70 +105,64 @@ def upload_screenshot(driver: webdriver.Chrome, config: Config, name: str) -> bo
         return False
 
 def perform_login(driver: webdriver.Chrome, config: Config) -> bool:
-    """Simplified login flow with screenshots"""
+    """Simplified login flow with screenshots and dynamic element handling"""
     try:
-        # Step 1: Capture login page
+        # Step 1: Navigate to login page
         driver.get("https://clients.hireintelligence.io/login")
+        logger.info("Navigated to login page")
         upload_screenshot(driver, config, "login_page")
-        
-        # Step 2: Perform login
-        email = WebDriverWait(driver, config.explicit_wait).until(
-            EC.presence_of_element_located((By.NAME, "email"))
+
+        # Step 2: Wait for the form to load (using a more reliable parent container)
+        WebDriverWait(driver, config.explicit_wait).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "form"))
         )
+        logger.debug("Login form detected")
+
+        # Step 3: Find email field with updated selector
+        # Inspect the page to confirm the selector; fallback to alternative selectors
+        try:
+            email = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='email']"))
+            )
+        except:
+            # Fallback selectors based on common patterns
+            try:
+                email = driver.find_element(By.CSS_SELECTOR, "input[type='email']")
+            except:
+                email = driver.find_element(By.XPATH, "//input[contains(@id, 'email')]")
+        
         email.send_keys(config.username)
-        
-        password = driver.find_element(By.NAME, "password")
+        logger.debug("Entered username")
+
+        # Step 4: Find password field
+        try:
+            password = driver.find_element(By.CSS_SELECTOR, "input[name='password']")
+        except:
+            password = driver.find_element(By.XPATH, "//input[@type='password']")
         password.send_keys(config.password)
-        
-        submit = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+        logger.debug("Entered password")
+
+        # Step 5: Submit form
+        try:
+            submit = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+        except:
+            submit = driver.find_element(By.XPATH, "//button[contains(text(), 'Login')]")
         submit.click()
-        
-        # Step 3: Verify login success
+        logger.debug("Clicked submit button")
+
+        # Step 6: Verify login success
         WebDriverWait(driver, config.explicit_wait).until(
             EC.url_contains("clients.hireintelligence.io")
         )
+        logger.info("Login successful")
+        upload_screenshot(driver, config, "login_success")
         return True
-        
+
     except Exception as e:
         logger.error(f"Login failed: {str(e)}")
+        logger.debug(f"Stack trace:\n{traceback.format_exc()}")
         upload_screenshot(driver, config, "login_failed")
         return False
-
-def main() -> int:
-    driver = None
-    try:
-        config = Config().validate()
-        logger.info("Starting screenshot capture job")
-        
-        driver = setup_driver(config)
-        
-        # 1. Login flow
-        if not perform_login(driver, config):
-            raise RuntimeError("Login failed - check screenshots")
-        
-        # 2. Capture dashboard
-        driver.get("https://clients.hireintelligence.io/")
-        upload_screenshot(driver, config, "dashboard")
-        
-        # 3. Capture admin page
-        driver.get("https://clients.hireintelligence.io/multi-candidate-admin")
-        upload_screenshot(driver, config, "multi_candidate_admin")
-        
-        logger.info("Job completed successfully")
-        return 0
-        
-    except Exception as e:
-        logger.error(f"Job failed: {str(e)}")
-        logger.debug(f"Stack trace:\n{traceback.format_exc()}")  # Full traceback
-        return 1
-    finally:
-        if driver:
-            try:
-                driver.quit()
-                logger.info("Browser terminated")
-            except Exception as e:
-                logger.error(f"Error quitting browser: {str(e)}")
-                subprocess.run(["pkill", "-9", "-f", "chrome"], stderr=subprocess.DEVNULL)
 
 if __name__ == "__main__":
     exit(main())
