@@ -106,6 +106,7 @@ def upload_screenshot(driver: webdriver.Chrome, config: Config, name: str) -> bo
 
 def perform_login(driver: webdriver.Chrome, config: Config) -> bool:
     """Simplified login flow with screenshots and dynamic element handling"""
+    login_success = False
     try:
         # Step 1: Navigate to login page
         driver.get("https://clients.hireintelligence.io/login")
@@ -183,6 +184,7 @@ def perform_login(driver: webdriver.Chrome, config: Config) -> bool:
         WebDriverWait(driver, config.explicit_wait).until(
             EC.url_contains("clients.hireintelligence.io")
         )
+        login_success = True
         logger.info("Login successful")
         upload_screenshot(driver, config, "login_success")
         return True
@@ -192,6 +194,10 @@ def perform_login(driver: webdriver.Chrome, config: Config) -> bool:
         logger.debug(f"Full page source:\n{driver.page_source}")  # Log full source
         logger.debug(f"Stack trace:\n{traceback.format_exc()}")
         upload_screenshot(driver, config, "login_failed")
+        return False
+    finally:
+        if login_success and upload_screenshot(driver, config, "login_success"):
+            return True
         return False
 
 def main() -> int:
@@ -208,8 +214,11 @@ def main() -> int:
         else:
             logger.info("Login succeeded, proceeding with navigation")
         
-        # 2. Capture dashboard
+        # 2. Capture dashboard with wait
         driver.get("https://clients.hireintelligence.io/")
+        WebDriverWait(driver, config.explicit_wait).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "body"))
+        )
         upload_screenshot(driver, config, "dashboard")
         
         # 3. Capture admin page
