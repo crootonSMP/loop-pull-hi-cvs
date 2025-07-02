@@ -138,7 +138,7 @@ def login_to_hireintelligence(driver: webdriver.Chrome, config: Config) -> None:
             EC.presence_of_element_located((By.TAG_NAME, "body"))
         
         iframes = WebDriverWait(driver, config.explicit_wait).until(
-            EC.presence_of_all_elements_located((By.TAG_NAME, "iframe"))
+            EC.presence_of_all_elements_located((By.TAG_NAME, "iframe")))
         
         if not iframes:
             raise RuntimeError("No login iframes found")
@@ -182,8 +182,7 @@ def login_to_hireintelligence(driver: webdriver.Chrome, config: Config) -> None:
                 
                 # Verify login success
                 WebDriverWait(driver, 10).until_not(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='password']"))
-                )
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='password']")))
                 logger.info("Login successful")
                 driver.switch_to.default_content()
                 return
@@ -194,6 +193,11 @@ def login_to_hireintelligence(driver: webdriver.Chrome, config: Config) -> None:
                 continue
                 
         raise RuntimeError("All login attempts failed")
+        
+    except Exception as e:
+        logger.error(f"Login process failed: {str(e)}")
+        driver.save_screenshot("login_error.png")
+        raise
         
     except Exception as e:
         logger.error(f"Login process failed: {str(e)}")
