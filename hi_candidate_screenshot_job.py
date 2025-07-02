@@ -210,31 +210,46 @@ def login_to_hireintelligence(driver: webdriver.Chrome, config: Config) -> None:
 
 def extract_data_from_retool(driver: webdriver.Chrome, config: Config) -> pd.DataFrame:
     """Extract and save data from Retool application"""
-    logger.info("Starting data extraction")
+    logger.info("Starting data extraction process")
     
     try:
-        # Switch to main application iframe
+        # CORRECTED - Proper parentheses for WebDriverWait
         main_iframe = WebDriverWait(driver, config.explicit_wait).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "iframe[src*='retool'], iframe[src*='app']"))
+        )
         driver.switch_to.frame(main_iframe)
+        logger.info("Switched to main application iframe")
         
-        # Wait for data grid to load
+        # CORRECTED - Proper waiting syntax
         WebDriverWait(driver, config.explicit_wait).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, ".retool-data-grid, .ag-grid, .ant-table"))
+            EC.invisibility_of_element_located((By.CSS_SELECTOR, ".loading-spinner, .progress-bar, .ant-spin"))
+        )
         
-        headers = [th.text for th in driver.find_elements(
-            By.CSS_SELECTOR, ".retool-data-grid thead th, .ag-header-cell-text, .ant-table-thead th")]
+        # CORRECTED - Data grid detection
+        WebDriverWait(driver, config.explicit_wait).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".retool-data-grid, .ag-grid, .data-table, .ant-table"))
+        )
+        
+        headers = [
+            th.text for th in driver.find_elements(
+                By.CSS_SELECTOR, 
+                ".retool-data-grid thead th, .ag-header-cell-text, .ant-table-thead th"
+            )
+        ]
         
         data = []
         page = 1
-        max_pages = 10
+        max_pages = 10  # Safety limit
         
         while page <= max_pages:
             logger.info(f"Processing page {page}")
             
             rows = WebDriverWait(driver, 10).until(
                 EC.presence_of_all_elements_located((
-                    By.CSS_SELECTOR, ".retool-data-grid tbody tr, .ag-row, .ant-table-row")))
+                    By.CSS_SELECTOR,
+                    ".retool-data-grid tbody tr, .ag-row, .ant-table-row"
+                ))
+            )
             
             for row in rows:
                 cells = row.find_elements(By.CSS_SELECTOR, "td, .ag-cell, .ant-table-cell")
@@ -243,25 +258,32 @@ def extract_data_from_retool(driver: webdriver.Chrome, config: Config) -> pd.Dat
             
             try:
                 next_button = driver.find_element(
-                    By.CSS_SELECTOR, ".next-page, .ag-paging-next, .ant-pagination-next")
+                    By.CSS_SELECTOR,
+                    ".next-page, .ag-paging-next, .ant-pagination-next"
+                )
                 if "disabled" in next_button.get_attribute("class"):
                     break
+                
                 next_button.click()
                 WebDriverWait(driver, 10).until(EC.staleness_of(next_button))
                 page += 1
-            except:
+            except Exception:
                 break
         
         df = pd.DataFrame(data)
+        logger.info(f"Extracted {len(df)} records from {page-1} pages")
+        
+        os.makedirs(config.output_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_path = os.path.join(config.output_dir, f"hireintelligence_export_{timestamp}.csv")
         df.to_csv(output_path, index=False)
-        logger.info(f"Saved {len(df)} records to {output_path}")
+        logger.info(f"Data saved to {output_path}")
+        
         return df
         
     except Exception as e:
         logger.error(f"Data extraction failed: {str(e)}")
-        driver.save_screenshot("extraction_error.png")
+        driver.save_screenshot("data_extraction_error.png")
         raise
     finally:
         driver.switch_to.default_content()
