@@ -134,11 +134,15 @@ def login_to_hireintelligence(driver: webdriver.Chrome, config: Config) -> None:
     
     try:
         driver.get("https://clients.hireintelligence.io/login")
+        
+        # CORRECTED LINE - Added proper waiting and comma
         WebDriverWait(driver, config.explicit_wait).until(
             EC.presence_of_element_located((By.TAG_NAME, "body"))
+        )
         
         iframes = WebDriverWait(driver, config.explicit_wait).until(
-            EC.presence_of_all_elements_located((By.TAG_NAME, "iframe")))
+            EC.presence_of_all_elements_located((By.TAG_NAME, "iframe"))
+        )
         
         if not iframes:
             raise RuntimeError("No login iframes found")
