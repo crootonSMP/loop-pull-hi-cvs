@@ -69,4 +69,4 @@ RUN pip install --user --no-cache-dir -r requirements.txt
 # Copy application code
 COPY --chown=scraper:scraper . .
 
-CMD ["python", "hi_candidate_screenshot_job.py"]
+CMD ["python", "hi_cv_downloader.py"]
