@@ -1,5 +1,6 @@
 import os
 import time
+import subprocess
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 import logging
@@ -18,49 +19,95 @@ load_dotenv()
 
 # Configuration
 @dataclass
-@dataclass
 class Config:
     username: str = os.getenv('HIRE_USERNAME', '')
-    password: str = os.getenv('HIRE_PASSWORD', '')  # This will come from the secret
+    password: str = os.getenv('HIRE_PASSWORD', '')
     headless: bool = os.getenv('HEADLESS', 'true').lower() == 'true'
     implicit_wait: int = int(os.getenv('IMPLICIT_WAIT', '10'))
-    explicit_wait: int = int(os.getenv('EXPLICIT_WAIT', '20'))
+    explicit_wait: int = int(os.getenv('EXPLICIT_WAIT', '30'))  # Increased default
     output_dir: str = os.getenv('OUTPUT_DIR', 'output')
     chrome_driver_path: str = os.getenv('CHROMEDRIVER_PATH', '/usr/local/bin/chromedriver')
+    screen_width: int = int(os.getenv('SCREEN_WIDTH', '1920'))
+    screen_height: int = int(os.getenv('SCREEN_HEIGHT', '1080'))
 
     def validate(self):
+        """Validate configuration and credentials"""
         if not self.username or not self.password:
             raise ValueError("Missing credentials in environment variables")
+        os.makedirs(self.output_dir, exist_ok=True)
         return self
 
 # Initialize logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('scraper.log'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+def setup_logging():
+    """Configure logging with file rotation"""
+    log_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    
+    # File handler with rotation (10MB per file, max 3 files)
+    file_handler = logging.FileHandler('scraper.log')
+    file_handler.setFormatter(log_formatter)
+    
+    # Stream handler for console
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(log_formatter)
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+    
+    return logger
+
+logger = setup_logging()
+
+def verify_chrome_installation() -> bool:
+    """Verify Chrome and Chromedriver are properly installed"""
+    try:
+        chrome_version = subprocess.run(
+            ["google-chrome", "--version"],
+            check=True,
+            capture_output=True,
+            text=True
+        ).stdout.strip()
+        
+        driver_version = subprocess.run(
+            ["chromedriver", "--version"],
+            check=True,
+            capture_output=True,
+            text=True
+        ).stdout.strip()
+        
+        logger.info(f"Chrome version: {chrome_version}")
+        logger.info(f"Chromedriver version: {driver_version}")
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Chrome verification failed: {e.stderr}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected verification error: {str(e)}")
+        return False
 
 def setup_driver(config: Config) -> webdriver.Chrome:
     """Configure and initialize Chrome WebDriver with robust options"""
+    if not verify_chrome_installation():
+        raise RuntimeError("Chrome/Chromedriver verification failed")
+    
     chrome_options = Options()
     
-    # Core configuration
+    # Essential configuration
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')
-    chrome_options.add_argument('--window-size=1920,1080')
+    chrome_options.add_argument(f'--window-size={config.screen_width},{config.screen_height}')
     
-    # New headless mode
+    # Headless configuration
     if config.headless:
         chrome_options.add_argument('--headless=new')
     
-    # Anti-detection and optimization
-    chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+    # Stability and anti-detection
     chrome_options.add_argument('--disable-infobars')
+    chrome_options.add_argument('--disable-extensions')
+    chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+    chrome_options.add_argument('--disable-notifications')
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
     
@@ -68,203 +115,171 @@ def setup_driver(config: Config) -> webdriver.Chrome:
     service = Service(
         executable_path=config.chrome_driver_path,
         service_args=['--verbose'],
-        log_output='chromedriver.log'
+        log_path='chromedriver.log'
     )
     
     try:
         driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver.set_window_size(config.screen_width, config.screen_height)
         driver.implicitly_wait(config.implicit_wait)
-        logger.info("Chrome WebDriver initialized successfully")
+        logger.info("WebDriver initialized successfully")
         return driver
     except Exception as e:
         logger.error(f"Driver initialization failed: {str(e)}")
-        raise
-def verify_chrome_installation():
-    try:
-        subprocess.run(["google-chrome", "--version"], check=True)
-        subprocess.run(["chromedriver", "--version"], check=True)
-        return True
-    except subprocess.CalledProcessError:
-        return False
-        
+        raise RuntimeError("Failed to initialize WebDriver") from e
+
 def login_to_hireintelligence(driver: webdriver.Chrome, config: Config) -> None:
-    """Handle login to the HireIntelligence Retool application"""
-    logger.info("Navigating to login page")
-    driver.get("https://clients.hireintelligence.io/login")
+    """Handle login to the HireIntelligence application"""
+    logger.info("Starting login process")
     
-    # Wait for page to load completely
-    WebDriverWait(driver, config.explicit_wait).until(
-        lambda d: d.execute_script("return document.readyState") == "complete"
-    )
-    
-    # Find all iframes and attempt login in each
-    iframes = WebDriverWait(driver, config.explicit_wait).until(
-        EC.presence_of_all_elements_located((By.TAG_NAME, "iframe"))
-    )
-    
-    if not iframes:
-        logger.error("No iframes detected on login page")
-        raise RuntimeError("Login iframe not found")
+    try:
+        driver.get("https://clients.hireintelligence.io/login")
+        WebDriverWait(driver, config.explicit_wait).until(
+            EC.presence_of_element_located((By.TAG_NAME, "body"))
         
-    for idx, iframe in enumerate(iframes, 1):
-        try:
-            logger.info(f"Attempting login with iframe {idx}/{len(iframes)}")
-            driver.switch_to.frame(iframe)
+        iframes = WebDriverWait(driver, config.explicit_wait).until(
+            EC.presence_of_all_elements_located((By.TAG_NAME, "iframe"))
+        
+        if not iframes:
+            raise RuntimeError("No login iframes found")
             
-            # Enhanced element detection with multiple selector options
-            email_field = WebDriverWait(driver, 10).until(
-                EC.visibility_of_element_located((
-                    By.CSS_SELECTOR, 
-                    "input[name='email'], input[type='email'], #email"
-                ))
-            )
-            email_field.clear()
-            email_field.send_keys(config.username)
-            
-            password_field = driver.find_element(
-                By.CSS_SELECTOR, 
-                "input[name='password'], input[type='password'], #password"
-            )
-            password_field.clear()
-            password_field.send_keys(config.password)
-            
-            submit_button = driver.find_element(
-                By.CSS_SELECTOR, 
-                "button[type='submit'], button:contains('Log in'), #login-button"
-            )
-            submit_button.click()
-            
-            # Verify successful login by waiting for password field to disappear
-            WebDriverWait(driver, 10).until_not(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='password']"))
-            )
-            
-            logger.info("Login successful")
-            driver.switch_to.default_content()
-            return
-            
-        except Exception as e:
-            logger.warning(f"Login attempt {idx} failed: {str(e)}")
-            driver.switch_to.default_content()
-            continue
-            
-    raise RuntimeError("Failed to login through any iframe")
+        for idx, iframe in enumerate(iframes, 1):
+            try:
+                logger.info(f"Attempting login with iframe {idx}")
+                driver.switch_to.frame(iframe)
+                
+                # Unified element location strategy
+                def find_with_fallback(*selectors):
+                    for selector in selectors:
+                        try:
+                            return driver.find_element(By.CSS_SELECTOR, selector)
+                        except:
+                            continue
+                    raise EC.NoSuchElementException("No matching elements found")
+                
+                email_field = find_with_fallback(
+                    "input[name='email']",
+                    "input[type='email']",
+                    "#email"
+                )
+                email_field.clear()
+                email_field.send_keys(config.username)
+                
+                password_field = find_with_fallback(
+                    "input[name='password']",
+                    "input[type='password']",
+                    "#password"
+                )
+                password_field.clear()
+                password_field.send_keys(config.password)
+                
+                submit_button = find_with_fallback(
+                    "button[type='submit']",
+                    "button[id*='login']",
+                    "#login-button"
+                )
+                submit_button.click()
+                
+                # Verify login success
+                WebDriverWait(driver, 10).until_not(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='password']"))
+                )
+                logger.info("Login successful")
+                driver.switch_to.default_content()
+                return
+                
+            except Exception as e:
+                logger.warning(f"Login attempt {idx} failed: {str(e)}")
+                driver.switch_to.default_content()
+                continue
+                
+        raise RuntimeError("All login attempts failed")
+        
+    except Exception as e:
+        logger.error(f"Login process failed: {str(e)}")
+        driver.save_screenshot("login_error.png")
+        raise
 
 def extract_data_from_retool(driver: webdriver.Chrome, config: Config) -> pd.DataFrame:
     """Extract and save data from Retool application"""
-    logger.info("Starting data extraction process")
-    
-    # Wait for main application iframe
-    main_iframe = WebDriverWait(driver, config.explicit_wait).until(
-        EC.presence_of_element_located((
-            By.CSS_SELECTOR, 
-            "iframe[src*='retool'], iframe[src*='app'], iframe#main-iframe"
-        ))
-    )
-    driver.switch_to.frame(main_iframe)
-    logger.info("Switched to main application iframe")
-    
-    # Wait for loading to complete
-    WebDriverWait(driver, config.explicit_wait).until(
-        EC.invisibility_of_element_located((
-            By.CSS_SELECTOR, 
-            ".loading-spinner, .progress-bar, .ant-spin"
-        ))
-    )
+    logger.info("Starting data extraction")
     
     try:
-        # Wait for data grid to appear
-        WebDriverWait(driver, config.explicit_wait).until(
-            EC.presence_of_element_located((
-                By.CSS_SELECTOR, 
-                ".retool-data-grid, .ag-grid, .data-table, .ant-table"
-            ))
-        )
+        # Switch to main application iframe
+        main_iframe = WebDriverWait(driver, config.explicit_wait).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "iframe[src*='retool'], iframe[src*='app']"))
+        driver.switch_to.frame(main_iframe)
         
-        # Get column headers
-        headers = [
-            th.text for th in driver.find_elements(
-                By.CSS_SELECTOR, 
-                ".retool-data-grid thead th, .ag-header-cell-text, .ant-table-thead th"
-            )
-        ]
+        # Wait for data grid to load
+        WebDriverWait(driver, config.explicit_wait).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".retool-data-grid, .ag-grid, .ant-table"))
+        
+        headers = [th.text for th in driver.find_elements(
+            By.CSS_SELECTOR, ".retool-data-grid thead th, .ag-header-cell-text, .ant-table-thead th")]
         
         data = []
         page = 1
-        max_pages = 10  # Safety limit
+        max_pages = 10
         
         while page <= max_pages:
             logger.info(f"Processing page {page}")
             
-            # Get all visible rows
             rows = WebDriverWait(driver, 10).until(
                 EC.presence_of_all_elements_located((
-                    By.CSS_SELECTOR,
-                    ".retool-data-grid tbody tr, .ag-row, .ant-table-row"
-                ))
-            )
+                    By.CSS_SELECTOR, ".retool-data-grid tbody tr, .ag-row, .ant-table-row")))
             
-            # Extract data from each row
             for row in rows:
                 cells = row.find_elements(By.CSS_SELECTOR, "td, .ag-cell, .ant-table-cell")
                 if len(cells) == len(headers):
-                    row_data = {headers[i]: cell.text for i, cell in enumerate(cells)}
-                    data.append(row_data)
+                    data.append({headers[i]: cell.text for i, cell in enumerate(cells)})
             
-            # Handle pagination
             try:
                 next_button = driver.find_element(
-                    By.CSS_SELECTOR,
-                    ".next-page, .ag-paging-next, .ant-pagination-next"
-                )
+                    By.CSS_SELECTOR, ".next-page, .ag-paging-next, .ant-pagination-next")
                 if "disabled" in next_button.get_attribute("class"):
                     break
-                
                 next_button.click()
-                time.sleep(2)  # Allow new page to load
+                WebDriverWait(driver, 10).until(EC.staleness_of(next_button))
                 page += 1
             except:
                 break
         
-        # Create DataFrame
         df = pd.DataFrame(data)
-        logger.info(f"Extracted {len(df)} records from {page-1} pages")
-        
-        # Save with timestamp
-        os.makedirs(config.output_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_path = os.path.join(config.output_dir, f"hireintelligence_export_{timestamp}.csv")
         df.to_csv(output_path, index=False)
-        logger.info(f"Data saved to {output_path}")
-        
+        logger.info(f"Saved {len(df)} records to {output_path}")
         return df
         
     except Exception as e:
         logger.error(f"Data extraction failed: {str(e)}")
-        driver.save_screenshot("data_extraction_error.png")
+        driver.save_screenshot("extraction_error.png")
         raise
     finally:
         driver.switch_to.default_content()
 
 def main() -> int:
     """Main execution function with proper error handling"""
+    driver = None
     try:
-        config = Config().validate()  # This will validate credentials
+        config = Config().validate()
+        logger.info("Starting scraping job")
         
-        logger.info("Starting HireIntelligence scraper")
         driver = setup_driver(config)
-        
         login_to_hireintelligence(driver, config)
         extract_data_from_retool(driver, config)
         
-        logger.info("Scraping completed successfully")
+        logger.info("Job completed successfully")
         return 0
         
+    except ValueError as e:
+        logger.error(f"Configuration error: {str(e)}")
+        return 1
     except Exception as e:
-        logger.critical(f"Script failed: {str(e)}", exc_info=True)
+        logger.critical(f"Job failed: {str(e)}", exc_info=True)
         return 1
     finally:
-        if 'driver' in locals():
+        if driver:
             driver.quit()
             logger.info("Browser terminated")
 
