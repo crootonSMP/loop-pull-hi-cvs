@@ -24,7 +24,7 @@ class Config:
     password: str = os.getenv('HIRE_PASSWORD', '')
     headless: bool = os.getenv('HEADLESS', 'true').lower() == 'true'
     implicit_wait: int = int(os.getenv('IMPLICIT_WAIT', '10'))
-    explicit_wait: int = int(os.getenv('EXPLICIT_WAIT', '30'))  # Increased default
+    explicit_wait: int = int(os.getenv('EXPLICIT_WAIT', '30'))  # Increased timeout
     output_dir: str = os.getenv('OUTPUT_DIR', 'output')
     chrome_driver_path: str = os.getenv('CHROMEDRIVER_PATH', '/usr/local/bin/chromedriver')
     screen_width: int = int(os.getenv('SCREEN_WIDTH', '1920'))
@@ -40,20 +40,21 @@ class Config:
 # Initialize logging
 def setup_logging():
     """Configure logging with file rotation"""
-    log_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    
-    # File handler with rotation (10MB per file, max 3 files)
-    file_handler = logging.FileHandler('scraper.log')
-    file_handler.setFormatter(log_formatter)
-    
-    # Stream handler for console
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(log_formatter)
-
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
+    
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    
+    # File handler
+    file_handler = logging.FileHandler('scraper.log')
+    file_handler.setFormatter(formatter)
+    
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    
     logger.addHandler(file_handler)
-    logger.addHandler(stream_handler)
+    logger.addHandler(console_handler)
     
     return logger
 
@@ -98,6 +99,8 @@ def setup_driver(config: Config) -> webdriver.Chrome:
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument(f'--window-size={config.screen_width},{config.screen_height}')
+    chrome_options.add_argument('--user-data-dir=/tmp/chrome-profile')  # Critical fix
+    chrome_options.add_argument('--disable-application-cache')
     
     # Headless configuration
     if config.headless:
@@ -134,15 +137,11 @@ def login_to_hireintelligence(driver: webdriver.Chrome, config: Config) -> None:
     
     try:
         driver.get("https://clients.hireintelligence.io/login")
-        
-        # CORRECTED LINE - Added proper waiting and comma
         WebDriverWait(driver, config.explicit_wait).until(
             EC.presence_of_element_located((By.TAG_NAME, "body"))
-        )
         
         iframes = WebDriverWait(driver, config.explicit_wait).until(
-            EC.presence_of_all_elements_located((By.TAG_NAME, "iframe"))
-        )
+            EC.presence_of_all_elements_located((By.TAG_NAME, "iframe")))
         
         if not iframes:
             raise RuntimeError("No login iframes found")
@@ -202,53 +201,36 @@ def login_to_hireintelligence(driver: webdriver.Chrome, config: Config) -> None:
         logger.error(f"Login process failed: {str(e)}")
         driver.save_screenshot("login_error.png")
         raise
-        
-    except Exception as e:
-        logger.error(f"Login process failed: {str(e)}")
-        driver.save_screenshot("login_error.png")
-        raise
 
 def extract_data_from_retool(driver: webdriver.Chrome, config: Config) -> pd.DataFrame:
     """Extract and save data from Retool application"""
-    logger.info("Starting data extraction process")
+    logger.info("Starting data extraction")
     
     try:
-        # CORRECTED - Proper parentheses for WebDriverWait
+        # Switch to main application iframe
         main_iframe = WebDriverWait(driver, config.explicit_wait).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "iframe[src*='retool'], iframe[src*='app']"))
         )
         driver.switch_to.frame(main_iframe)
-        logger.info("Switched to main application iframe")
         
-        # CORRECTED - Proper waiting syntax
+        # Wait for data grid to load
         WebDriverWait(driver, config.explicit_wait).until(
-            EC.invisibility_of_element_located((By.CSS_SELECTOR, ".loading-spinner, .progress-bar, .ant-spin"))
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".retool-data-grid, .ag-grid, .ant-table"))
         )
         
-        # CORRECTED - Data grid detection
-        WebDriverWait(driver, config.explicit_wait).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, ".retool-data-grid, .ag-grid, .data-table, .ant-table"))
-        )
-        
-        headers = [
-            th.text for th in driver.find_elements(
-                By.CSS_SELECTOR, 
-                ".retool-data-grid thead th, .ag-header-cell-text, .ant-table-thead th"
-            )
-        ]
+        headers = [th.text for th in driver.find_elements(
+            By.CSS_SELECTOR, ".retool-data-grid thead th, .ag-header-cell-text, .ant-table-thead th")]
         
         data = []
         page = 1
-        max_pages = 10  # Safety limit
+        max_pages = 10
         
         while page <= max_pages:
             logger.info(f"Processing page {page}")
             
             rows = WebDriverWait(driver, 10).until(
                 EC.presence_of_all_elements_located((
-                    By.CSS_SELECTOR,
-                    ".retool-data-grid tbody tr, .ag-row, .ant-table-row"
-                ))
+                    By.CSS_SELECTOR, ".retool-data-grid tbody tr, .ag-row, .ant-table-row"))
             )
             
             for row in rows:
@@ -258,32 +240,25 @@ def extract_data_from_retool(driver: webdriver.Chrome, config: Config) -> pd.Dat
             
             try:
                 next_button = driver.find_element(
-                    By.CSS_SELECTOR,
-                    ".next-page, .ag-paging-next, .ant-pagination-next"
-                )
+                    By.CSS_SELECTOR, ".next-page, .ag-paging-next, .ant-pagination-next")
                 if "disabled" in next_button.get_attribute("class"):
                     break
-                
                 next_button.click()
                 WebDriverWait(driver, 10).until(EC.staleness_of(next_button))
                 page += 1
-            except Exception:
+            except:
                 break
         
         df = pd.DataFrame(data)
-        logger.info(f"Extracted {len(df)} records from {page-1} pages")
-        
-        os.makedirs(config.output_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_path = os.path.join(config.output_dir, f"hireintelligence_export_{timestamp}.csv")
         df.to_csv(output_path, index=False)
-        logger.info(f"Data saved to {output_path}")
-        
+        logger.info(f"Saved {len(df)} records to {output_path}")
         return df
         
     except Exception as e:
         logger.error(f"Data extraction failed: {str(e)}")
-        driver.save_screenshot("data_extraction_error.png")
+        driver.save_screenshot("extraction_error.png")
         raise
     finally:
         driver.switch_to.default_content()
@@ -297,7 +272,7 @@ def main() -> int:
         
         driver = setup_driver(config)
         login_to_hireintelligence(driver, config)
-        extract_data_from_retool(driver, config)
+        result = extract_data_from_retool(driver, config)
         
         logger.info("Job completed successfully")
         return 0
@@ -310,8 +285,13 @@ def main() -> int:
         return 1
     finally:
         if driver:
-            driver.quit()
-            logger.info("Browser terminated")
+            try:
+                driver.quit()
+                logger.info("Browser terminated")
+            except Exception as e:
+                logger.warning(f"Error during driver quit: {str(e)}")
+            # Force cleanup if needed
+            subprocess.run(["pkill", "-f", "chrome"], stderr=subprocess.DEVNULL)
 
 if __name__ == "__main__":
     exit(main())
