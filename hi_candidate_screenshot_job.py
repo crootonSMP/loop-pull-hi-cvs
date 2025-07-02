@@ -109,6 +109,7 @@ def perform_login(driver: webdriver.Chrome, config: Config) -> bool:
     try:
         # Step 1: Navigate to login page
         driver.get("https://clients.hireintelligence.io/login")
+        time.sleep(2)
         logger.info("Navigated to login page")
         upload_screenshot(driver, config, "login_page")
 
@@ -160,6 +161,7 @@ def perform_login(driver: webdriver.Chrome, config: Config) -> bool:
 
     except Exception as e:
         logger.error(f"Login failed: {str(e)}")
+        logger.debug(f"Page source:\n{driver.page_source[:1000]}...")  # Truncate for brevity
         logger.debug(f"Stack trace:\n{traceback.format_exc()}")
         upload_screenshot(driver, config, "login_failed")
         return False
