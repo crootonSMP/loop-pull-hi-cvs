@@ -23,7 +23,7 @@ import google.auth
 from dotenv import load_dotenv
 
 # Typing imports
-from typing import Optional  # Added to define Optional type hint
+from typing import Optional
 
 # Logging Setup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -97,7 +97,7 @@ def perform_login() -> bool:
     """Perform login using Selenium"""
     global driver
     username = os.getenv('HIRE_USERNAME', '')
-    password = get_secret("HIRE_PASSWORD")
+    password = get_secret("hire-password")  # Updated to match deploy.sh secret name
     
     login_success = False
     try:
