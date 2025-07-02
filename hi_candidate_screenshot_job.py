@@ -90,125 +90,55 @@ def verify_chrome_installation() -> bool:
 
 def setup_driver(config: Config) -> webdriver.Chrome:
     """Configure and initialize Chrome WebDriver with robust options"""
-    import tempfile
-    import shutil
-    
-    if not verify_chrome_installation():
-        raise RuntimeError("Chrome/Chromedriver verification failed")
-    
-    chrome_options = Options()
-    
-    # Create unique temp directory
-    temp_dir = tempfile.mkdtemp(prefix='chrome-')
-    profile_dir = os.path.join(temp_dir, 'profile')
-    os.makedirs(profile_dir, exist_ok=True)
-    
-    # Essential configuration
-    chrome_options.add_argument('--no-sandbox')
-    chrome_options.add_argument('--disable-dev-shm-usage')
-    chrome_options.add_argument('--disable-gpu')
-    chrome_options.add_argument(f'--window-size={config.screen_width},{config.screen_height}')
-    chrome_options.add_argument(f'--user-data-dir={profile_dir}')
-    chrome_options.add_argument('--disable-application-cache')
-    
-    # Critical stability flags
-    chrome_options.add_argument('--single-process')
-    chrome_options.add_argument('--no-zygote')
-    chrome_options.add_argument('--disable-setuid-sandbox')
-    chrome_options.add_argument('--remote-debugging-port=0')  # Auto-select port
-    
-    # Headless configuration
-    if config.headless:
-        chrome_options.add_argument('--headless=new')
-    
-    # Configure service
-    service = Service(
-        executable_path=config.chrome_driver_path,
-        service_args=[
-            '--verbose',
-            f'--user-data-dir={profile_dir}',
-            '--log-path=chromedriver.log'
-        ]
-    )
-    
     try:
+        chrome_options = Options()
+        
+        # Essential configuration for containerized environments
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--disable-gpu')
+        chrome_options.add_argument(f'--window-size={config.screen_width},{config.screen_height}')
+        chrome_options.add_argument('--disable-extensions')
+        chrome_options.add_argument('--disable-setuid-sandbox')
+        chrome_options.add_argument('--disable-software-rasterizer')
+        chrome_options.add_argument('--remote-debugging-port=9222')
+        
+        # Headless configuration
+        if config.headless:
+            chrome_options.add_argument('--headless=new')
+        
+        # Configure service with error handling
+        service = Service(
+            executable_path=config.chrome_driver_path,
+            service_args=['--verbose']
+        )
+        
+        # Additional stability parameters
         driver = webdriver.Chrome(
             service=service,
             options=chrome_options,
-            service_log_path='chromedriver.log'
+            service_log_path=os.path.join(config.output_dir, 'chromedriver.log')
         )
+        
+        # Verify driver is actually working
+        driver.get('about:blank')
+        if not driver.title == '':
+            raise RuntimeError("Driver verification failed")
+            
         driver.implicitly_wait(config.implicit_wait)
-        logger.info(f"Chrome started with profile: {profile_dir}")
+        logger.info("WebDriver initialized successfully")
         return driver
+        
     except Exception as e:
-        logger.error(f"Driver initialization failed: {str(e)}")
-        # Clean up temp directory
+        logger.error(f"Driver initialization failed: {str(e)}", exc_info=True)
+        # Capture additional debug information
         try:
-            shutil.rmtree(temp_dir, ignore_errors=True)
-        except Exception as cleanup_error:
-            logger.warning(f"Failed to clean up temp dir: {cleanup_error}")
+            subprocess.run([config.chrome_driver_path, "--version"], check=True)
+            subprocess.run(["google-chrome", "--version"], check=True)
+        except Exception as version_error:
+            logger.error(f"Version check failed: {version_error}")
+        
         raise RuntimeError("Failed to initialize WebDriver") from e
-
-def extract_data_from_retool(driver: webdriver.Chrome, config: Config) -> pd.DataFrame:
-    """Extract and save data from Retool application"""
-    logger.info("Starting data extraction")
-    
-    try:
-        # Switch to main application iframe
-        main_iframe = WebDriverWait(driver, config.explicit_wait).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "iframe[src*='retool'], iframe[src*='app']"))
-        )
-        driver.switch_to.frame(main_iframe)
-        
-        # Wait for data grid to load
-        WebDriverWait(driver, config.explicit_wait).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, ".retool-data-grid, .ag-grid, .ant-table"))
-        )
-        
-        headers = [th.text for th in driver.find_elements(
-            By.CSS_SELECTOR, ".retool-data-grid thead th, .ag-header-cell-text, .ant-table-thead th")]
-        
-        data = []
-        page = 1
-        max_pages = 10
-        
-        while page <= max_pages:
-            logger.info(f"Processing page {page}")
-            
-            rows = WebDriverWait(driver, 10).until(
-                EC.presence_of_all_elements_located((
-                    By.CSS_SELECTOR, ".retool-data-grid tbody tr, .ag-row, .ant-table-row"))
-            )
-            
-            for row in rows:
-                cells = row.find_elements(By.CSS_SELECTOR, "td, .ag-cell, .ant-table-cell")
-                if len(cells) == len(headers):
-                    data.append({headers[i]: cell.text for i, cell in enumerate(cells)})
-            
-            try:
-                next_button = driver.find_element(
-                    By.CSS_SELECTOR, ".next-page, .ag-paging-next, .ant-pagination-next")
-                if "disabled" in next_button.get_attribute("class"):
-                    break
-                next_button.click()
-                WebDriverWait(driver, 10).until(EC.staleness_of(next_button))
-                page += 1
-            except:
-                break
-        
-        df = pd.DataFrame(data)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path = os.path.join(config.output_dir, f"hireintelligence_export_{timestamp}.csv")
-        df.to_csv(output_path, index=False)
-        logger.info(f"Saved {len(df)} records to {output_path}")
-        return df
-        
-    except Exception as e:
-        logger.error(f"Data extraction failed: {str(e)}")
-        driver.save_screenshot("extraction_error.png")
-        raise
-    finally:
-        driver.switch_to.default_content()
 
 def main() -> int:
     driver = None
