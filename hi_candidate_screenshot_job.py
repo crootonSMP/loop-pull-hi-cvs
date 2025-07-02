@@ -6,6 +6,7 @@ from datetime import datetime
 import logging
 from dataclasses import dataclass
 from io import BytesIO
+from contextlib import contextmanager
 
 # Selenium imports
 from selenium import webdriver
