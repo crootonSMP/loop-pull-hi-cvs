@@ -20,7 +20,8 @@ from selenium.common.exceptions import WebDriverException
 
 # Google Cloud
 from google.cloud import storage
-from google.cloud import secretmanager  # Added for apiKey
+from google.cloud import secretmanager
+import google.auth
 
 # Requests for API calls
 import requests
@@ -114,7 +115,7 @@ def upload_file_to_gcs(file_content: BytesIO, config: Config, destination_blob_n
         bucket = storage_client.bucket(config.screenshot_bucket)
         blob = bucket.blob(destination_blob_name)
         file_content.seek(0)
-        # Set content type based on file (default to PDF, adjust later if needed)
+        # Set content type based on file (default to PDF, adjust later)
         blob.upload_from_file(file_content, content_type='application/pdf')
         logger.info(f"Uploaded file to: gs://{config.screenshot_bucket}/{destination_blob_name}")
         return True
@@ -122,19 +123,18 @@ def upload_file_to_gcs(file_content: BytesIO, config: Config, destination_blob_n
         logger.error(f"Failed to upload file to GCS: {e}")
         return False
 
+def get_project_id():
+    """Resolve GCP project from ADC"""
+    _, project_id = google.auth.default()
+    if not project_id:
+        raise RuntimeError("Could not determine GCP Project ID")
+    return project_id
+
 def get_secret(secret_id: str) -> str:
     """Fetch secret from Secret Manager"""
     name = f"projects/{get_project_id()}/secrets/{secret_id}/versions/latest"
     payload = secret_client.access_secret_version(request={"name": name}).payload.data
     return payload.decode("utf-8").strip()
-
-def get_project_id():
-    """Resolve GCP project from ADC"""
-    import google.auth
-    _, project_id = google.auth.default()
-    if not project_id:
-        raise RuntimeError("Could not determine GCP Project ID")
-    return project_id
 
 def download_cv(cv_id: int, config: Config) -> tuple[str, BytesIO]:
     """Download a CV using the API"""
@@ -149,7 +149,7 @@ def download_cv(cv_id: int, config: Config) -> tuple[str, BytesIO]:
         "loggedInBuyer": "1061"
     }
     try:
-        # Extract cookies from Selenium session for authentication (if needed)
+        # Attempt to use Selenium cookies for authentication
         cookies = {cookie['name']: cookie['value'] for cookie in driver.get_cookies()}
         response = requests.get(metadata_url, params=params, cookies=cookies, timeout=30)
         response.raise_for_status()
