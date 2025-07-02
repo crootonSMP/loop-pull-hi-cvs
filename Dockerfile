@@ -101,9 +101,25 @@ RUN groupadd -r scraper && \
 WORKDIR /app
 USER scraper
 
-# Install Python dependencies - optimized for caching
+# Install Python dependencies - list packages directly to avoid requirements.txt issues
 COPY --chown=scraper:scraper requirements.txt .
-RUN pip install --user --no-cache-dir -r requirements.txt --ignore-installed retool-py
+RUN pip install --user --no-cache-dir \
+    selenium==4.9.1 \
+    webdriver-manager==3.8.6 \
+    requests==2.31.0 \
+    urllib3==2.0.4 \
+    pandas==2.0.3 \
+    openpyxl==3.1.2 \
+    python-dotenv==1.0.0 \
+    selenium-wire==5.1.0 \
+    browsermob-proxy==0.8.0 \
+    beautifulsoup4==4.12.2 \
+    lxml==4.9.3 \
+    tqdm==4.65.0 \
+    python-dateutil==2.8.2 \
+    pytz==2023.3 \
+    tenacity==8.2.3 \
+    backoff==2.2.1
 
 # Copy application code - with explicit permissions
 COPY --chown=scraper:scraper --chmod=644 . .
