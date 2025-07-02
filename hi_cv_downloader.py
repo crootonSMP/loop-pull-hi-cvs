@@ -219,7 +219,6 @@ def perform_login(driver: webdriver.Chrome, config: Config) -> bool:
         return False
 
 def get_yesterdays_cvs(driver: webdriver.Chrome, config: Config, buyer_id: str = "1061") -> List[Dict]:
-    """Fetch CVs from Multi-Candidate Admin filtered by yesterday's date using date picker interaction and download button parsing"""
     from datetime import datetime, timedelta
     import re
 
@@ -236,69 +235,80 @@ def get_yesterdays_cvs(driver: webdriver.Chrome, config: Config, buyer_id: str =
         )
         upload_screenshot(driver, config, "multi_candidate_admin")
 
-        # Step 1: Click on the date picker input
+        # Open date picker
         logger.debug("Attempting to open date picker")
         date_input = WebDriverWait(driver, 15).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, ".MuiInputBase-root input"))
         )
         date_input.click()
-        time.sleep(1)  # Let calendar render
+        time.sleep(1)
 
-        # Step 2: Click yesterday's day in the calendar
+        # Click yesterday’s date
         logger.debug(f"Trying to select day {yesterday_day} in calendar")
         day_button = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((
-                By.XPATH, f"//button[contains(@class, 'MuiPickersDay') and text()='{yesterday_day}']"
-            ))
+            EC.element_to_be_clickable((By.XPATH, f"//button[contains(@class, 'MuiPickersDay') and text()='{yesterday_day}']"))
         )
         day_button.click()
         logger.info(f"Selected {yesterday_str} from calendar")
-        time.sleep(2)  # Wait for table to refresh
+        time.sleep(2)
 
-        # Step 3: Wait for table to load
+        # Wait for rows
         WebDriverWait(driver, config.explicit_wait).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "table tr"))
         )
 
         rows = driver.find_elements(By.CSS_SELECTOR, "table tr")
-        for row in rows[1:]:  # Skip header
+        for row in rows[1:]:  # skip header
             try:
                 cells = row.find_elements(By.TAG_NAME, "td")
-                if len(cells) >= 7:
-                    candidate_text = cells[6].text.strip()
-                    names = candidate_text.split()[0:2]
-                    first_name = names[0] if len(names) > 0 else ""
-                    last_name = names[1] if len(names) > 1 else ""
+                if len(cells) < 7:
+                    continue
 
-                    # Get the download button in the last cell
-                    download_button = cells[-1].find_element(By.TAG_NAME, "button")
-                    onclick_js = download_button.get_attribute("onclick")  # e.g., downloadCV('123','456')
+                # Extract name
+                candidate_text = cells[6].text.strip()
+                names = candidate_text.split()[0:2]
+                first_name = names[0] if len(names) > 0 else ""
+                last_name = names[1] if len(names) > 1 else ""
 
-                    match = re.search(r"downloadCV\('([^']+)','([^']+)'\)", onclick_js)
-                    if match:
-                        user_id, cv_id = match.groups()
-                        cv_list.append({
-                            "first_name": first_name,
-                            "last_name": last_name,
-                            "user_id": user_id,
-                            "cv_id": cv_id,
-                            "buyer_id": buyer_id
-                        })
-                        logger.debug(f"Found CV: {first_name} {last_name} (UserID: {user_id}, CvID: {cv_id})")
-                    else:
-                        logger.warning(f"Could not parse IDs from onclick: {onclick_js}")
+                # Find the download button
+                download_button = cells[-1].find_element(By.TAG_NAME, "button")
 
+                # Try extracting from attached JS function
+                js = """
+                const btn = arguments[0];
+                const fnStr = btn.getAttribute('onclick') || btn.onclick?.toString();
+                return fnStr;
+                """
+                onclick_str = driver.execute_script(js, download_button)
+
+                if not onclick_str:
+                    logger.warning("No onclick string found, skipping row")
+                    continue
+
+                match = re.search(r"downloadCV\('([^']+)','([^']+)'\)", onclick_str)
+                if match:
+                    user_id, cv_id = match.groups()
+                    cv_list.append({
+                        "first_name": first_name,
+                        "last_name": last_name,
+                        "user_id": user_id,
+                        "cv_id": cv_id,
+                        "buyer_id": buyer_id
+                    })
+                    logger.debug(f"✅ Found CV: {first_name} {last_name} (UserID: {user_id}, CvID: {cv_id})")
+                else:
+                    logger.warning(f"Could not extract IDs from onclick string: {onclick_str}")
             except Exception as e:
-                logger.warning(f"Error processing row: {str(e)}")
+                logger.warning(f"Error processing CV row: {str(e)}")
                 continue
 
-        logger.info(f"Found {len(cv_list)} CVs for {yesterday_str}")
+        logger.info(f"Collected {len(cv_list)} CVs for {yesterday_str}")
         return cv_list
+
     except Exception as e:
         logger.error(f"Failed to fetch CVs: {str(e)}")
         upload_screenshot(driver, config, "cv_list_failed")
         return []
-
 
 def download_cv(config: Config, cv_data: Dict) -> Optional[Dict]:
     """Download a single CV using the API observed in the HAR file"""
