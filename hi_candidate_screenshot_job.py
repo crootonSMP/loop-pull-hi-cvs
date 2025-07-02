@@ -79,7 +79,14 @@ def setup_driver(config: Config) -> webdriver.Chrome:
     except Exception as e:
         logger.error(f"Driver initialization failed: {str(e)}")
         raise
-
+def verify_chrome_installation():
+    try:
+        subprocess.run(["google-chrome", "--version"], check=True)
+        subprocess.run(["chromedriver", "--version"], check=True)
+        return True
+    except subprocess.CalledProcessError:
+        return False
+        
 def login_to_hireintelligence(driver: webdriver.Chrome, config: Config) -> None:
     """Handle login to the HireIntelligence Retool application"""
     logger.info("Navigating to login page")
