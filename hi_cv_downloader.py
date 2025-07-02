@@ -22,6 +22,9 @@ import google.auth
 # Load environment variables
 from dotenv import load_dotenv
 
+# Typing imports
+from typing import Optional  # Added to define Optional type hint
+
 # Logging Setup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
