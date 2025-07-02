@@ -166,5 +166,41 @@ def perform_login(driver: webdriver.Chrome, config: Config) -> bool:
         upload_screenshot(driver, config, "login_failed")
         return False
 
+def main() -> int:
+    driver = None
+    try:
+        config = Config().validate()
+        logger.info("Starting screenshot capture job")
+        
+        driver = setup_driver(config)
+        
+        # 1. Login flow
+        if not perform_login(driver, config):
+            raise RuntimeError("Login failed - check screenshots")
+        
+        # 2. Capture dashboard
+        driver.get("https://clients.hireintelligence.io/")
+        upload_screenshot(driver, config, "dashboard")
+        
+        # 3. Capture admin page
+        driver.get("https://clients.hireintelligence.io/multi-candidate-admin")
+        upload_screenshot(driver, config, "multi_candidate_admin")
+        
+        logger.info("Job completed successfully")
+        return 0
+        
+    except Exception as e:
+        logger.error(f"Job failed: {str(e)}")
+        logger.debug(f"Stack trace:\n{traceback.format_exc()}")
+        return 1
+    finally:
+        if driver:
+            try:
+                driver.quit()
+                logger.info("Browser terminated")
+            except Exception as e:
+                logger.error(f"Error quitting browser: {str(e)}")
+                subprocess.run(["pkill", "-9", "-f", "chrome"], stderr=subprocess.DEVNULL)
+
 if __name__ == "__main__":
     exit(main())
