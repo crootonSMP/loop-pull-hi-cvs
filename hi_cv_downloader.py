@@ -92,24 +92,82 @@ def upload_file_to_gcs(config: Config, file_content: bytes, blob_name: str) -> b
         return False
 
 def perform_login(driver: webdriver.Chrome, config: Config) -> bool:
+    """Robust login with retries and fallback selectors."""
+    login_success = False
     try:
         driver.get("https://clients.hireintelligence.io/login")
         time.sleep(2)
-        WebDriverWait(driver, config.explicit_wait).until(EC.presence_of_element_located((By.CSS_SELECTOR, "form")))
-        email = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='email']")))
+        logger.info("Navigated to login page")
+        upload_screenshot(driver, config, "login_page")
+
+        WebDriverWait(driver, config.explicit_wait).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "form"))
+        )
+        logger.debug("Login form detected")
+
+        # Try different selectors for email
+        email = None
+        for _ in range(3):
+            try:
+                email = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='email']"))
+                )
+                break
+            except:
+                try:
+                    email = driver.find_element(By.CSS_SELECTOR, "input[type='email']")
+                    break
+                except:
+                    time.sleep(2)
+
         email.send_keys(config.username)
-        password = driver.find_element(By.CSS_SELECTOR, "input[name='password']")
+
+        # Try different selectors for password
+        password = None
+        for _ in range(3):
+            try:
+                password = driver.find_element(By.CSS_SELECTOR, "input[name='password']")
+                break
+            except:
+                try:
+                    password = driver.find_element(By.XPATH, "//input[@type='password']")
+                    break
+                except:
+                    time.sleep(2)
+
         password.send_keys(config.password)
-        submit = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+
+        # Try to find submit button
+        submit = None
+        for _ in range(3):
+            try:
+                submit = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+                break
+            except:
+                try:
+                    submit = driver.find_element(By.XPATH, "//button[contains(text(), 'Login')]")
+                    break
+                except:
+                    time.sleep(2)
+
         submit.click()
-        WebDriverWait(driver, config.explicit_wait).until(EC.url_contains("clients.hireintelligence.io"))
+        logger.debug("Clicked login button")
+
+        # Wait for redirect
+        WebDriverWait(driver, config.explicit_wait).until(
+            EC.url_contains("clients.hireintelligence.io")
+        )
+        login_success = True
+        logger.info("Login successful")
         time.sleep(5)
         upload_screenshot(driver, config, "login_success")
         return True
+
     except Exception as e:
         logger.error(f"Login failed: {str(e)}")
         upload_screenshot(driver, config, "login_failed")
         return False
+
 
 def get_yesterdays_cvs(driver: webdriver.Chrome, config: Config, buyer_id: str = "1061"):
     cv_list = []
