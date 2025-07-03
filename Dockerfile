@@ -1,4 +1,4 @@
-# Use the official Python image as base
+# Use the official Python image as base RESH
 FROM python:3.10-slim
 
 # Install Chrome and Chromedriver using Chrome for Testing
