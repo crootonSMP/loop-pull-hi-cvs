@@ -235,56 +235,66 @@ def get_yesterdays_cvs(driver: webdriver.Chrome, config: Config, buyer_id: str =
         )
         upload_screenshot(driver, config, "multi_candidate_admin")
 
-        # Open date picker
-        logger.debug("Attempting to open date picker")
+        # Step 1: Click the date picker
+        logger.debug("Opening date picker")
         date_input = WebDriverWait(driver, 15).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, ".MuiInputBase-root input"))
         )
         date_input.click()
         time.sleep(1)
 
-        # Click yesterday’s date
-        logger.debug(f"Trying to select day {yesterday_day} in calendar")
+        # Step 2: Click yesterday's day
+        logger.debug(f"Clicking day {yesterday_day}")
         day_button = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, f"//button[contains(@class, 'MuiPickersDay') and text()='{yesterday_day}']"))
         )
         day_button.click()
-        logger.info(f"Selected {yesterday_str} from calendar")
-        time.sleep(2)
+        logger.info(f"Selected date: {yesterday_str}")
+        time.sleep(7)  # ⏳ Give UI time to refresh table
 
-        # Wait for rows
+        # Step 3: Wait for table to load
         WebDriverWait(driver, config.explicit_wait).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "table tr"))
         )
+        rows = driver.find_elements(By.CSS_SELECTOR, "table tr")
 
-        try:
-    cells = row.find_elements(By.TAG_NAME, "td")
-    if len(cells) < 7:
-        continue
+        for row in rows[1:]:  # skip header
+            try:
+                cells = row.find_elements(By.TAG_NAME, "td")
+                if len(cells) < 7:
+                    continue
 
-    candidate_text = cells[6].text.strip()
-    names = candidate_text.split()[0:2]
-    first_name = names[0] if len(names) > 0 else ""
-    last_name = names[1] if len(names) > 1 else ""
+                candidate_text = cells[6].text.strip()
+                names = candidate_text.split()[0:2]
+                first_name = names[0] if len(names) > 0 else ""
+                last_name = names[1] if len(names) > 1 else ""
 
-    # Try scraping embedded user_id and cv_id from HTML
-    html = row.get_attribute("outerHTML")
-    match = re.search(r"downloadCV\('(\d+)','(\d+)'\)", html)
-    if match:
-        user_id, cv_id = match.groups()
-        cv_list.append({
-            "first_name": first_name,
-            "last_name": last_name,
-            "user_id": user_id,
-            "cv_id": cv_id,
-            "buyer_id": buyer_id
-        })
-        logger.debug(f"✅ Found CV: {first_name} {last_name} (UserID: {user_id}, CvID: {cv_id})")
-    else:
-        logger.warning(f"❌ No downloadCV(...) JS string found in row HTML")
+                # Fallback: pull IDs from raw row HTML
+                html = row.get_attribute("outerHTML")
+                match = re.search(r"downloadCV\('(\d+)',\s*'(\d+)'\)", html)
+                if match:
+                    user_id, cv_id = match.groups()
+                    cv_list.append({
+                        "first_name": first_name,
+                        "last_name": last_name,
+                        "user_id": user_id,
+                        "cv_id": cv_id,
+                        "buyer_id": buyer_id
+                    })
+                    logger.debug(f"✅ Found CV: {first_name} {last_name} (UserID: {user_id}, CvID: {cv_id})")
+                else:
+                    logger.warning("❌ Could not extract IDs from row HTML")
+            except Exception as e:
+                logger.warning(f"Error processing row: {str(e)}")
+                continue
 
-except Exception as e:
-    logger.warning(f"Error processing row: {str(e)}")
+        logger.info(f"Finished scanning table. Found {len(cv_list)} CV(s) for {yesterday_str}")
+        return cv_list
+
+    except Exception as e:
+        logger.error(f"Failed to fetch CVs: {str(e)}")
+        upload_screenshot(driver, config, "cv_list_failed")
+        return []
 
 def download_cv(config: Config, cv_data: Dict) -> Optional[Dict]:
     """Download a single CV using the API observed in the HAR file"""
