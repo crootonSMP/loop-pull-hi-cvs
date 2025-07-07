@@ -1,0 +1,10 @@
+python-dotenv==1.0.1
+python-dateutil==2.8.2
+pytz==2024.1
+google-cloud-storage==2.16.0
+google-cloud-secret-manager==2.19.0
+google-auth==2.29.0
+pandas==2.2.2
+requests==2.32.3
+sqlalchemy==2.0.30
+cloud-sql-python-connector[pg8000]==1.5.2
