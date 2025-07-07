@@ -20,7 +20,7 @@ COPY --chown=appuser:appuser requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY --chown=appuser:appuser daily_candidate_importer.py .
+COPY --chown=appuser:appuser daily_CV_and_candidate_importer.py .
 
 # Run the script
 ENTRYPOINT ["python", "daily_CV_and_candidate_importer.py"]
