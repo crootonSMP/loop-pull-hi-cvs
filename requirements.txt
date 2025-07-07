@@ -7,4 +7,4 @@ google-auth==2.29.0
 pandas==2.2.2
 requests==2.32.3
 sqlalchemy==2.0.30
-cloud-sql-python-connector[pg8000]==1.5.2
+cloud-sql-python-connector[pg8000]==1.18.2
