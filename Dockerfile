@@ -23,4 +23,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY --chown=appuser:appuser daily_candidate_importer.py .
 
 # Run the script
-ENTRYPOINT ["python", "daily_candidate_importer.py"]
+ENTRYPOINT ["python", "daily_CV_and_candidate_importer.py"]
