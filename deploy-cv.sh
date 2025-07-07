@@ -1,4 +1,4 @@
-#!/bin/bash
+e#!/bin/bash
 set -e
 
 # Configuration
@@ -14,7 +14,7 @@ REPO="europe-west2-docker.pkg.dev/intelligent-recruitment-engine/recruitment-eng
 # Generate timestamp-based tag and job name
 TIMESTAMP=$(date +"%Y%m%d-%H%M")
 JOB_TAG="${BASE_TAG}-${TIMESTAMP}"
-JOB_NAME="daily-cvs-job-${JOB_TAG}"
+JOB_NAME="yesterdays-hi-candidates-with-cv-${JOB_TAG}"
 IMAGE_NAME="${REPO}/${JOB_NAME}:${JOB_TAG}"
 
 echo "🛠 Step 1: Preparing workspace..."
