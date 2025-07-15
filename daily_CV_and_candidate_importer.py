@@ -162,18 +162,6 @@ def create_candidates_table(engine):
             connection.commit()
             logger.info(f"Verified or created table '{DB_TABLE_NAME}'.")
 
-            # Create new unique index on (lower(email), lower(job_ref_number), created_on)
-            create_new_unique_index_sql = sqlalchemy.text(f"""
-            CREATE UNIQUE INDEX IF NOT EXISTS unique_email_job_ref_created_on_idx
-            ON {DB_TABLE_NAME} (lower(email), lower(job_ref_number), created_on);
-            """)
-            connection.execute(create_new_unique_index_sql)
-            connection.commit()
-            logger.info(f"Created unique index on (lower(email), lower(job_ref_number), created_on).")
-    except Exception as e:
-        logger.error(f"Failed to create table or manage indexes: {e}")
-        raise
-
 class CVDownloadTool:
     def __init__(self, api_key, token):
         self.base_url = "https://partnersapi.applygateway.com/api/Candidate"
