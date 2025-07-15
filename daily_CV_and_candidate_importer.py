@@ -162,22 +162,6 @@ def create_candidates_table(engine):
             connection.commit()
             logger.info(f"Verified or created table '{DB_TABLE_NAME}'.")
 
-            # Drop old unique index if it exists
-            drop_old_index_sql = sqlalchemy.text(f"""
-            DROP INDEX IF EXISTS unique_application_email_job_ref_idx;
-            """)
-            connection.execute(drop_old_index_sql)
-            connection.commit()
-            logger.info("Dropped old unique index if it existed.")
-
-            # Drop previous unique index if it exists
-            drop_prev_new_index_sql = sqlalchemy.text(f"""
-            DROP INDEX IF EXISTS unique_email_job_ref_created_on_idx;
-            """)
-            connection.execute(drop_prev_new_index_sql)
-            connection.commit()
-            logger.info("Dropped previous unique index if it existed.")
-
             # Create new unique index on (lower(email), lower(job_ref_number), created_on)
             create_new_unique_index_sql = sqlalchemy.text(f"""
             CREATE UNIQUE INDEX IF NOT EXISTS unique_email_job_ref_created_on_idx
