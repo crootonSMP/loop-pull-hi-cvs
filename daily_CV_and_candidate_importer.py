@@ -161,6 +161,10 @@ def create_candidates_table(engine):
             connection.execute(create_sql)
             connection.commit()
             logger.info(f"Verified or created table '{DB_TABLE_NAME}'.")
+    except Exception as e:
+        logger.error(f"Failed to create table '{DB_TABLE_NAME}': {e}")
+        raise
+
 
 class CVDownloadTool:
     def __init__(self, api_key, token):
