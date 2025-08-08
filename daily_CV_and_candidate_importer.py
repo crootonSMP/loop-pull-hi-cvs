@@ -21,13 +21,17 @@ def start_browser():
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    # ... other arguments
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    
+    # ✅ FIX: Add this argument to help with bot detection
+    options.add_argument('--disable-webgl')
 
     driver = uc.Chrome(
         browser_executable_path="/opt/chrome/chrome",
         driver_executable_path="/usr/local/bin/chromedriver",
         options=options,
-        # ✅ CHANGE THIS VALUE from 118 to 127
         version_main=127
     )
     return driver
@@ -35,15 +39,25 @@ def start_browser():
 def login(driver):
     print("🔐 Navigating to login page...")
     driver.get(LOGIN_URL)
-    WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "email")))
+    
+    # ✅ FIX: Wait for the email field to be present
+    wait = WebDriverWait(driver, 20)
+    wait.until(EC.presence_of_element_located((By.ID, "email")))
+
+    # ✅ FIX: Add a significant delay for bot detection scripts to load
+    print("⏳ Pausing for 5 seconds to allow bot detection to clear...")
+    time.sleep(5) 
 
     print("📝 Submitting login form...")
     driver.find_element(By.ID, "email").send_keys(USERNAME)
     driver.find_element(By.ID, "password").send_keys(PASSWORD)
+
+    # It's good practice to add a small delay before clicking
+    time.sleep(1) 
     driver.find_element(By.XPATH, '//button[contains(text(), "Login")]').click()
 
     # Wait for dashboard to load
-    WebDriverWait(driver, 30).until(
+    wait.until(
         EC.presence_of_element_located((By.XPATH, '//*[contains(text(), "Jobs Listed")]'))
     )
     print("✅ Logged in successfully.")
