@@ -47,5 +47,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY --chown=appuser:appuser daily_CV_and_candidate_importer.py .
 
-# Use xvfb-run to start the virtual screen and then run the Python script
-ENTRYPOINT ["xvfb-run", "--auto-servernum", "--server-args=-screen 0 1920x1080x24", "python", "daily_CV_and_candidate_importer.py"]
+# ✅ FIX: Use a less resource-intensive screen resolution (1280x720) and color depth (16)
+ENTRYPOINT ["xvfb-run", "--auto-servernum", "--server-args=-screen 0 1280x720x16", "python", "daily_CV_and_candidate_importer.py"]
