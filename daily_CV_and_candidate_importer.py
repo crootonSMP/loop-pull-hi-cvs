@@ -6,6 +6,7 @@ import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from google.cloud import storage
 
 # Load credentials from environment
 USERNAME = os.getenv("HIRE_USERNAME")
@@ -15,28 +16,39 @@ CANDIDATE_URL = "https://clients.hireintelligence.io/candidates"
 BUCKET_NAME = os.getenv("CV_BUCKET_NAME", "intelligent-recruitment-cvs")
 
 def start_browser():
+    print("🚀 Launching Chrome browser with undetected-chromedriver...")
     options = uc.ChromeOptions()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+
+    # ✅ REQUIRED for Cloud Run: specify Chrome binary
+    options.binary_location = "/usr/bin/google-chrome"
+
     driver = uc.Chrome(options=options)
     return driver
 
 def login(driver):
+    print("🔐 Navigating to login page...")
     driver.get(LOGIN_URL)
     WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "email")))
 
+    print("📝 Submitting login form...")
     driver.find_element(By.ID, "email").send_keys(USERNAME)
     driver.find_element(By.ID, "password").send_keys(PASSWORD)
     driver.find_element(By.XPATH, '//button[contains(text(), "Login")]').click()
 
+    # Wait for dashboard to load
     WebDriverWait(driver, 30).until(
         EC.presence_of_element_located((By.XPATH, '//*[contains(text(), "Jobs Listed")]'))
     )
     print("✅ Logged in successfully.")
 
 def fetch_candidates(driver):
+    print("📥 Navigating to candidates page...")
     driver.get(CANDIDATE_URL)
     WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.TAG_NAME, "table")))
 
@@ -53,34 +65,38 @@ def fetch_candidates(driver):
                 "job_ref_number": cols[2].text.strip(),
                 "created_on": cols[3].text.strip()
             })
+
     return pd.DataFrame(data)
 
 def save_and_upload(df):
     if df.empty:
-        print("⚠️ No candidate data found.")
+        print("⚠️ No candidate data found to save.")
         return
+
     filename = f"hi_candidates_{datetime.now().strftime('%Y-%m-%d')}.xlsx"
     df.to_excel(filename, index=False)
-    print(f"💾 Saved: {filename}")
+    print(f"💾 Report saved locally as {filename}")
 
-    # Upload to GCS
-    from google.cloud import storage
+    print("☁️ Uploading report to Google Cloud Storage...")
     client = storage.Client()
     bucket = client.bucket(BUCKET_NAME)
     blob = bucket.blob(f"reports/{filename}")
     blob.upload_from_filename(filename)
-    print(f"✅ Uploaded to GCS: {BUCKET_NAME}/reports/{filename}")
+    print(f"✅ Uploaded to: gs://{BUCKET_NAME}/reports/{filename}")
 
 def main():
+    print("🚦 Starting candidate import script...")
     driver = start_browser()
     try:
         login(driver)
         df = fetch_candidates(driver)
         save_and_upload(df)
     except Exception as e:
-        print("❌ Error:", e)
+        print("❌ Error during execution:", str(e))
     finally:
+        print("🧹 Closing browser session...")
         driver.quit()
+        print("🏁 Script finished.")
 
 if __name__ == "__main__":
     main()
