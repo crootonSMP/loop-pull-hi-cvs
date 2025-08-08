@@ -1,14 +1,17 @@
 import os
-import requests
+import time
 import pandas as pd
 from datetime import datetime
 from google.cloud import storage
 import logging
-import time
 
 # ✅ IMPORT VANILLA SELENIUM
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 # --- Logging Setup ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -16,83 +19,77 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # --- Environment Variables ---
 USERNAME = os.getenv("HIRE_USERNAME")
 PASSWORD = os.getenv("HIRE_PASSWORD")
-API_KEY = os.getenv("HIRE_API_KEY") # We will now use the API key
-LOGIN_API_URL = "https://clients.hireintelligence.io/api/v1/auth/login"
+LOGIN_URL = "https://clients.hireintelligence.io/"
 CANDIDATE_URL = "https://clients.hireintelligence.io/candidates"
 BUCKET_NAME = os.getenv("CV_BUCKET_NAME", "intelligent-recruitment-cvs")
 
-def api_login():
-    """Performs login via API to get a session cookie, avoiding the bot-protected web form."""
-    logging.info("🔐 Attempting login via API...")
-    
-    headers = {
-        "X-API-Key": API_KEY,
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-    payload = {
-        "email": USERNAME,
-        "password": PASSWORD
-    }
-    
-    session = requests.Session()
-    response = session.post(LOGIN_API_URL, headers=headers, json=payload)
-    
-    if response.status_code == 200:
-        logging.info("✅ API Login successful.")
-        # Return the session object which contains the necessary cookies
-        return session.cookies
-    else:
-        logging.error(f"❌ API Login failed with status code {response.status_code}: {response.text}")
-        raise Exception("API Login failed.")
-
-def start_browser_with_session(session_cookies):
-    """Starts a browser and injects the session cookies."""
-    logging.info("🚀 Launching Chrome browser to inject session...")
+def start_browser():
+    logging.info("🚀 Launching Chrome browser in a virtual display (headed mode)...")
     
     options = webdriver.ChromeOptions()
+    
+    # All our best evasion options
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1280,720")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument('--disable-webgl')
+    options.add_argument('--window-size=1280,720')
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36")
+    options.add_argument('accept-language=en-US,en;q=0.9')
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
     
     driver_path = "/usr/local/bin/chromedriver"
     service = Service(executable_path=driver_path)
 
+    logging.info("Initializing webdriver.Chrome()...")
     driver = webdriver.Chrome(service=service, options=options)
-    
-    # The key part: Inject the cookies into the browser
-    # Must navigate to the domain first before you can add cookies for it
-    driver.get(CANDIDATE_URL) 
-    time.sleep(1) # Small pause to ensure the page is ready for cookies
-    
-    for cookie in session_cookies:
-        driver.add_cookie({
-            'name': cookie.name,
-            'value': cookie.value,
-            'domain': cookie.domain,
-            'path': cookie.path,
-            'secure': cookie.secure,
-            'httpOnly': cookie.secure, # Assume httpOnly if secure
-        })
-    logging.info("🍪 Session cookies injected successfully.")
-    
+    logging.info("✅ Browser started successfully!")
     return driver
 
+def login(driver):
+    logging.info("🔐 Navigating to login page...")
+    driver.get(LOGIN_URL)
+    wait = WebDriverWait(driver, 20)
+    try:
+        wait.until(EC.presence_of_element_located((By.ID, "email")))
+        logging.info("⏳ Pausing to allow bot detection scripts to run...")
+        time.sleep(5) # Increased sleep time for maximum safety
+        
+        email_input = driver.find_element(By.ID, "email")
+        password_input = driver.find_element(By.ID, "password")
+        login_button = driver.find_element(By.XPATH, '//button[contains(text(), "Login")]')
+        
+        logging.info("📝 Simulating user actions and submitting login form...")
+        actions = ActionChains(driver)
+        actions.move_to_element(email_input).pause(0.5).click().send_keys(USERNAME).pause(0.5)
+        actions.move_to_element(password_input).pause(0.5).click().send_keys(PASSWORD).pause(0.5)
+        actions.move_to_element(login_button).click()
+        actions.perform()
+    except Exception as e:
+        logging.error(f"❌ An error occurred during the login process: {e}", exc_info=True)
+        # Taking a screenshot is very helpful for debugging login failures
+        try:
+            driver.save_screenshot("login_error_screenshot.png")
+            logging.info("📸 Screenshot saved as login_error_screenshot.png")
+        except Exception as ss_e:
+            logging.error(f"Could not save screenshot: {ss_e}")
+        raise
+        
+    wait.until(EC.presence_of_element_located((By.XPATH, '//*[contains(text(), "Jobs Listed")]')))
+    logging.info("✅ Logged in successfully.")
+
+
 def fetch_candidates(driver):
-    """Fetches candidate data from the now-logged-in browser session."""
     logging.info("📥 Navigating to candidates page...")
-    # Navigate to the page again to load it with the new session
-    driver.get(CANDIDATE_URL) 
-    
-    # Wait for the table to be present
-    wait = webdriver.support.ui.WebDriverWait(driver, 20)
-    wait.until(webdriver.support.expected_conditions.presence_of_element_located((webdriver.common.by.By.TAG_NAME, "table")))
-    
-    rows = driver.find_elements(webdriver.common.by.By.XPATH, "//table//tbody//tr")
+    driver.get(CANDIDATE_URL)
+    WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.TAG_NAME, "table")))
+    rows = driver.find_elements(By.XPATH, "//table//tbody//tr")
     logging.info(f"📄 Found {len(rows)} candidate rows.")
     data = []
     for row in rows:
-        cols = row.find_elements(webdriver.common.by.By.TAG_NAME, "td")
+        cols = row.find_elements(By.TAG_NAME, "td")
         if len(cols) >= 4:
             data.append({
                 "name": cols[0].text.strip(),
@@ -121,14 +118,10 @@ def main():
     logging.info("--- Starting main function ---")
     driver = None
     try:
-        # New authentication flow
-        session_cookies = api_login()
-        driver = start_browser_with_session(session_cookies)
-        
-        # Now fetch the data
+        driver = start_browser()
+        login(driver)
         df = fetch_candidates(driver)
         save_and_upload(df)
-        
     except Exception as e:
         logging.critical("--- A critical error occurred in main execution loop ---", exc_info=True)
     finally:
