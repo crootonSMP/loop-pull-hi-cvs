@@ -12,25 +12,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 libgbm1 xdg-utils libu2f-udev libvulkan1 && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Chrome for Testing (v127)
+# ✅ Correctly install Chrome for Testing v127 to /opt/chrome/
 RUN CHROME_VERSION="127.0.6533.72" && \
-    mkdir -p /opt/chrome && \
     wget -q https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROME_VERSION}/linux64/chrome-linux64.zip && \
-    unzip chrome-linux64.zip -d /opt/ && \
-    mv /opt/chrome-linux64 /opt/chrome && \
-    rm chrome-linux64.zip
+    unzip chrome-linux64.zip && \
+    mkdir -p /opt/chrome && \
+    mv chrome-linux64/* /opt/chrome/ && \
+    rm -rf chrome-linux64.zip chrome-linux64
 
-# Create a non-root user for security BEFORE we modify permissions
+# Create a non-root user for security
 RUN useradd --create-home appuser
 
 # Install the matching ChromeDriver and set correct permissions
 RUN CHROME_VERSION="127.0.6533.72" && \
     wget -q https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROME_VERSION}/linux64/chromedriver-linux64.zip && \
-    unzip chromedriver-linux64.zip -d /usr/local/bin/ && \
-    mv /usr/local/bin/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver && \
+    unzip chromedriver-linux64.zip && \
+    mv chromedriver-linux64/chromedriver /usr/local/bin/chromedriver && \
     chmod +x /usr/local/bin/chromedriver && \
     chown appuser:appuser /usr/local/bin/chromedriver && \
-    rm chromedriver-linux64.zip && rm -rf /usr/local/bin/chromedriver-linux64
+    rm -rf chromedriver-linux64.zip chromedriver-linux64
 
 # Add the Chrome binary to the system's PATH
 ENV PATH="/opt/chrome:${PATH}"
