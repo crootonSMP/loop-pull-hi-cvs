@@ -25,10 +25,22 @@ def start_browser():
     options.add_argument("--disable-extensions")
     options.add_argument("--disable-blink-features=AutomationControlled")
 
-    # ✅ REQUIRED for Cloud Run: specify Chrome binary
-    options.binary_location = "/usr/bin/google-chrome"
+    # ❌ REMOVE THIS LINE: The path is incorrect for your Docker setup.
+    # options.binary_location = "/usr/bin/google-chrome" 
 
-    driver = uc.Chrome(options=options)
+    driver = uc.Chrome(
+        # ✅ Point to the correct browser binary installed by your Dockerfile
+        browser_executable_path="/opt/chrome/chrome",
+
+        # ✅ Point to the correct driver installed by your Dockerfile
+        driver_executable_path="/usr/local/bin/chromedriver",
+        
+        # ✅ It's best practice to pass the options object here
+        options=options,
+
+        # ✅ Specify the major version to prevent auto-detection issues
+        version_main=118
+    )
     return driver
 
 def login(driver):
