@@ -5,12 +5,12 @@ FROM python:3.11-bookworm
 ENV TZ=Europe/London
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/timezone && echo $TZ > /etc/timezone
 
-# Install system dependencies PLUS xvfb AND its dependency xauth
+# ✅ FIX: Add 'tini' to the installation list. It acts as a proper init system.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget unzip curl gnupg2 ca-certificates fonts-liberation libappindicator3-1 libasound2 \
     libatk-bridge2.0-0 libatk1.0-0 libcups2 libdbus-1-3 libgdk-pixbuf2.0-0 libnspr4 libnss3 \
     libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 libgbm1 xdg-utils libu2f-udev libvulkan1 \
-    xvfb xauth && \
+    xvfb xauth tini && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Chrome for Testing v127
@@ -44,12 +44,12 @@ WORKDIR /home/appuser/app
 COPY --chown=appuser:appuser requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code AND the new entrypoint script
+# Copy application code AND the entrypoint script
 COPY --chown=appuser:appuser daily_CV_and_candidate_importer.py .
 COPY --chown=appuser:appuser entrypoint.sh .
 
-# ✅ FIX: Make the new entrypoint script executable
+# Make the entrypoint script executable
 RUN chmod +x entrypoint.sh
 
-# ✅ FIX: Set the new script as the container's entrypoint
-ENTRYPOINT ["./entrypoint.sh"]
+# ✅ FIX: Use 'tini' to launch our entrypoint script. This correctly manages the process lifecycle.
+ENTRYPOINT ["/usr/bin/tini", "--", "./entrypoint.sh"]
