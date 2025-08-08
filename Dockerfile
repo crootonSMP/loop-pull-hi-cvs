@@ -1,36 +1,45 @@
+# Use a standard Python base image
 FROM python:3.11-bookworm
 
+# Set timezone
 ENV TZ=Europe/London
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/timezone && echo $TZ > /etc/timezone
 
-# Install dependencies for Chrome + Selenium
+# Install system dependencies required for headless Chrome
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget unzip curl gnupg2 ca-certificates fonts-liberation libappindicator3-1 libasound2 \
     libatk-bridge2.0-0 libatk1.0-0 libcups2 libdbus-1-3 libgdk-pixbuf2.0-0 libnspr4 libnss3 \
     libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 libgbm1 xdg-utils libu2f-udev libvulkan1 && \
     rm -rf /var/lib/apt/lists/*
 
-# ✅ Install Chrome v117.0.5938.92
-RUN wget https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_117.0.5938.92-1_amd64.deb && \
-    apt install -y ./google-chrome-stable_117.0.5938.92-1_amd64.deb && \
-    rm google-chrome-stable_117.0.5938.92-1_amd64.deb
+# ✅ Install Chrome for Testing (v118) using a reliable link
+RUN mkdir -p /opt/chrome && \
+    wget -q https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/118.0.5993.117/linux64/chrome-linux64.zip && \
+    unzip chrome-linux64.zip && \
+    mv chrome-linux64/* /opt/chrome/ && \
+    rm -rf chrome-linux64.zip chrome-linux64
 
-# ✅ Install matching ChromeDriver
-RUN wget -O /tmp/chromedriver.zip https://chromedriver.storage.googleapis.com/117.0.5938.92/chromedriver_linux64.zip && \
-    unzip /tmp/chromedriver.zip -d /usr/local/bin/ && \
+# ✅ Install the matching ChromeDriver for v118
+RUN wget -q https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/118.0.5993.117/linux64/chromedriver-linux64.zip && \
+    unzip chromedriver-linux64.zip && \
+    mv chromedriver-linux64/chromedriver /usr/local/bin/chromedriver && \
     chmod +x /usr/local/bin/chromedriver && \
-    rm /tmp/chromedriver.zip
+    rm -rf chromedriver-linux64.zip chromedriver-linux64
 
-# Create non-root user
+# Add the Chrome binary to the system's PATH
+ENV PATH="/opt/chrome:${PATH}"
+
+# Create a non-root user for security
 RUN useradd --create-home appuser
 USER appuser
 WORKDIR /home/appuser/app
 
-# Python dependencies
+# Install Python dependencies
 COPY --chown=appuser:appuser requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy your script
+# Copy the application code
 COPY --chown=appuser:appuser daily_CV_and_candidate_importer.py .
 
+# Set the entrypoint to run the script
 ENTRYPOINT ["python", "daily_CV_and_candidate_importer.py"]
