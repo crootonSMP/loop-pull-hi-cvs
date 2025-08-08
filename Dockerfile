@@ -29,7 +29,7 @@ RUN CHROME_VERSION="127.0.6533.72" && \
     unzip chromedriver-linux64.zip -d /usr/local/bin/ && \
     mv /usr/local/bin/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver && \
     chmod +x /usr/local/bin/chromedriver && \
-    chown appuser:appuser /usr/local/bin/chromedriver && # ✅ FIX: Give ownership to appuser
+    chown appuser:appuser /usr/local/bin/chromedriver && \
     rm chromedriver-linux64.zip && rm -rf /usr/local/bin/chromedriver-linux64
 
 # Add the Chrome binary to the system's PATH
