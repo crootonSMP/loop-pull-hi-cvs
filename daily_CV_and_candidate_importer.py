@@ -26,10 +26,13 @@ BUCKET_NAME = os.getenv("CV_BUCKET_NAME", "intelligent-recruitment-cvs")
 def start_browser():
     logging.info("🚀 Launching Chrome browser with vanilla Selenium in a virtual display...")
     
-    # ✅ Use standard Selenium ChromeOptions
     options = webdriver.ChromeOptions()
     
-    # Keep all our evasion options
+    # ✅ FIX: Add a path for a user data directory. This makes the browser look less like a bot.
+    # The directory will be created inside the container.
+    options.add_argument("--user-data-dir=/home/appuser/chrome_profile")
+    
+    # Keep all our other evasion options
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
@@ -41,12 +44,10 @@ def start_browser():
     options.add_argument('accept-language=en-US,en;q=0.9')
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     
-    # ✅ Define the Service object for the driver
     driver_path = "/usr/local/bin/chromedriver"
     service = Service(executable_path=driver_path)
 
     logging.info("Initializing webdriver.Chrome()...")
-    # ✅ Instantiate the standard Selenium driver
     driver = webdriver.Chrome(service=service, options=options)
     logging.info("✅ Browser started successfully!")
     return driver
