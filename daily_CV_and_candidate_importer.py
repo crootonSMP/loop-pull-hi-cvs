@@ -17,17 +17,14 @@ CANDIDATE_URL = "https://clients.hireintelligence.io/candidates"
 BUCKET_NAME = os.getenv("CV_BUCKET_NAME", "intelligent-recruitment-cvs")
 
 def start_browser():
-    print("🚀 Launching Chrome browser with undetected-chromedriver...")
+    print("🚀 Launching Chrome browser in a virtual display (headed mode)...")
     options = uc.ChromeOptions()
-    options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--disable-extensions")
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument('--disable-webgl')
-
-    # ✅ FIX: Add these new arguments to appear more human
     options.add_argument('--window-size=1920,1080')
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36")
     options.add_argument('accept-language=en-US,en;q=0.9')
