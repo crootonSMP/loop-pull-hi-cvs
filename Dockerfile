@@ -44,8 +44,12 @@ WORKDIR /home/appuser/app
 COPY --chown=appuser:appuser requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application code AND the new entrypoint script
 COPY --chown=appuser:appuser daily_CV_and_candidate_importer.py .
+COPY --chown=appuser:appuser entrypoint.sh .
 
-# ✅ FIX: Use a less resource-intensive screen resolution (1280x720) and color depth (16)
-ENTRYPOINT ["xvfb-run", "--auto-servernum", "--server-args=-screen 0 1280x720x16", "python", "daily_CV_and_candidate_importer.py"]
+# ✅ FIX: Make the new entrypoint script executable
+RUN chmod +x entrypoint.sh
+
+# ✅ FIX: Set the new script as the container's entrypoint
+ENTRYPOINT ["./entrypoint.sh"]
