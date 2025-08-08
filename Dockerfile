@@ -12,19 +12,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 libgbm1 xdg-utils libu2f-udev libvulkan1 && \
     rm -rf /var/lib/apt/lists/*
 
-# ✅ Install Chrome for Testing (v118) using a reliable link
-RUN mkdir -p /opt/chrome && \
-    wget -q https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/118.0.5993.117/linux64/chrome-linux64.zip && \
-    unzip chrome-linux64.zip && \
-    mv chrome-linux64/* /opt/chrome/ && \
-    rm -rf chrome-linux64.zip chrome-linux64
+# ✅ Install a newer, working version of Chrome for Testing (v127)
+RUN CHROME_VERSION="127.0.6533.72" && \
+    mkdir -p /opt/chrome && \
+    wget -q https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROME_VERSION}/linux64/chrome-linux64.zip && \
+    unzip chrome-linux64.zip -d /opt/ && \
+    mv /opt/chrome-linux64 /opt/chrome && \
+    rm chrome-linux64.zip
 
-# ✅ Install the matching ChromeDriver for v118
-RUN wget -q https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/118.0.5993.117/linux64/chromedriver-linux64.zip && \
-    unzip chromedriver-linux64.zip && \
-    mv chromedriver-linux64/chromedriver /usr/local/bin/chromedriver && \
+# ✅ Install the matching ChromeDriver for v127
+RUN CHROME_VERSION="127.0.6533.72" && \
+    wget -q https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROME_VERSION}/linux64/chromedriver-linux64.zip && \
+    unzip chromedriver-linux64.zip -d /usr/local/bin/ && \
+    mv /usr/local/bin/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver && \
     chmod +x /usr/local/bin/chromedriver && \
-    rm -rf chromedriver-linux64.zip chromedriver-linux64
+    rm chromedriver-linux64.zip && rm -rf /usr/local/bin/chromedriver-linux64
 
 # Add the Chrome binary to the system's PATH
 ENV PATH="/opt/chrome:${PATH}"
