@@ -5,17 +5,37 @@ FROM python:3.11-bookworm
 ENV TZ=Europe/London
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/timezone && echo $TZ > /etc/timezone
 
-# Add 'tini' for proper process management and 'xauth' for the virtual display
-# ✅ FIX: Added 'apt-get clean' to remove downloaded package files and save space
+# ✅ FIX: Install a minimal set of dependencies to save disk space
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget unzip curl gnupg2 ca-certificates fonts-liberation libappindicator3-1 libasound2 \
-    libatk-bridge2.0-0 libatk1.0-0 libcups2 libdbus-1-3 libgdk-pixbuf2.0-0 libnspr4 libnss3 \
-    libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 libgbm1 xdg-utils libu2f-udev libvulkan1 \
-    xvfb xauth tini \
+    # Essential libraries for Chrome
+    ca-certificates \
+    fonts-liberation \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libgdk-pixbuf2.0-0 \
+    libnspr4 \
+    libnss3 \
+    libx11-xcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libgbm1 \
+    libxss1 \
+    # Our virtual display and process manager
+    xvfb \
+    xauth \
+    tini \
+    # Utilities
+    wget \
+    unzip \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Chrome for Testing
+# This version is known to be available
 RUN CHROME_VERSION="128.0.6548.0" && \
     wget -q https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chrome-linux64.zip && \
     unzip chrome-linux64.zip && \
@@ -53,5 +73,5 @@ COPY --chown=appuser:appuser entrypoint.sh .
 # Make the entrypoint script executable
 RUN chmod +x entrypoint.sh
 
-# Use 'tini' to launch our entrypoint script, which correctly manages the process lifecycle
+# Use 'tini' to launch our entrypoint script
 ENTRYPOINT ["/usr/bin/tini", "--", "./entrypoint.sh"]
