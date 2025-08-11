@@ -2,16 +2,16 @@ import os
 import time
 import pandas as pd
 from datetime import datetime
-from google.cloud import storage
 import logging
 
-# ✅ IMPORT VANILLA SELENIUM
+# --- Main Libraries ---
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
+from google.cloud import storage
 
 # --- Logging Setup ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -23,65 +23,61 @@ LOGIN_URL = "https://clients.hireintelligence.io/"
 CANDIDATE_URL = "https://clients.hireintelligence.io/candidates"
 BUCKET_NAME = os.getenv("CV_BUCKET_NAME", "intelligent-recruitment-cvs")
 
+# ✅ --- Bright Data Credentials ---
+BRIGHTDATA_USERNAME = os.getenv("BRIGHTDATA_USERNAME")
+BRIGHTDATA_PASSWORD = os.getenv("BRIGHTDATA_PASSWORD")
+BRIGHTDATA_HOST = "brd.superproxy.io"
+BRIGHTDATA_PORT = 22225
+
 def start_browser():
-    logging.info("🚀 Launching Chrome browser in a virtual display (headed mode)...")
+    """Starts a browser connected through the Bright Data Scraping Browser proxy."""
+    logging.info("🚀 Launching Chrome browser via Bright Data Scraping Browser...")
     
     options = webdriver.ChromeOptions()
     
-    # All our best evasion options
+    # ✅ Configure the proxy connection for Bright Data
+    proxy_url = f"http://{BRIGHTDATA_USERNAME}:{BRIGHTDATA_PASSWORD}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
+    options.add_argument(f'--proxy-server={proxy_url}')
+    
+    # Standard options
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--disable-extensions")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument('--disable-webgl')
     options.add_argument('--window-size=1280,720')
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36")
-    options.add_argument('accept-language=en-US,en;q=0.9')
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
     
     driver_path = "/usr/local/bin/chromedriver"
     service = Service(executable_path=driver_path)
 
-    logging.info("Initializing webdriver.Chrome()...")
     driver = webdriver.Chrome(service=service, options=options)
-    logging.info("✅ Browser started successfully!")
+    logging.info("✅ Browser started successfully and connected via proxy!")
     return driver
 
 def login(driver):
+    """Performs a standard login, now protected by the Bright Data proxy."""
     logging.info("🔐 Navigating to login page...")
     driver.get(LOGIN_URL)
-    wait = WebDriverWait(driver, 20)
+    wait = WebDriverWait(driver, 30) # Increased wait time for proxy connection
     try:
         wait.until(EC.presence_of_element_located((By.ID, "email")))
-        logging.info("⏳ Pausing to allow bot detection scripts to run...")
-        time.sleep(5) # Increased sleep time for maximum safety
+        logging.info("Page loaded. Submitting credentials...")
         
-        email_input = driver.find_element(By.ID, "email")
-        password_input = driver.find_element(By.ID, "password")
-        login_button = driver.find_element(By.XPATH, '//button[contains(text(), "Login")]')
+        # We can likely go back to a simpler login method now
+        driver.find_element(By.ID, "email").send_keys(USERNAME)
+        driver.find_element(By.ID, "password").send_keys(PASSWORD)
+        time.sleep(1)
+        driver.find_element(By.XPATH, '//button[contains(text(), "Login")]').click()
         
-        logging.info("📝 Simulating user actions and submitting login form...")
-        actions = ActionChains(driver)
-        actions.move_to_element(email_input).pause(0.5).click().send_keys(USERNAME).pause(0.5)
-        actions.move_to_element(password_input).pause(0.5).click().send_keys(PASSWORD).pause(0.5)
-        actions.move_to_element(login_button).click()
-        actions.perform()
     except Exception as e:
         logging.error(f"❌ An error occurred during the login process: {e}", exc_info=True)
-        # Taking a screenshot is very helpful for debugging login failures
-        try:
-            driver.save_screenshot("login_error_screenshot.png")
-            logging.info("📸 Screenshot saved as login_error_screenshot.png")
-        except Exception as ss_e:
-            logging.error(f"Could not save screenshot: {ss_e}")
+        driver.save_screenshot("login_error_screenshot.png")
+        logging.info("📸 Screenshot saved as login_error_screenshot.png")
         raise
         
     wait.until(EC.presence_of_element_located((By.XPATH, '//*[contains(text(), "Jobs Listed")]')))
-    logging.info("✅ Logged in successfully.")
+    logging.info("✅ Logged in successfully!")
 
 
 def fetch_candidates(driver):
+    # This function is correct and does not need to change
     logging.info("📥 Navigating to candidates page...")
     driver.get(CANDIDATE_URL)
     WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.TAG_NAME, "table")))
@@ -91,15 +87,11 @@ def fetch_candidates(driver):
     for row in rows:
         cols = row.find_elements(By.TAG_NAME, "td")
         if len(cols) >= 4:
-            data.append({
-                "name": cols[0].text.strip(),
-                "email": cols[1].text.strip(),
-                "job_ref_number": cols[2].text.strip(),
-                "created_on": cols[3].text.strip()
-            })
+            data.append({"name": cols[0].text.strip(), "email": cols[1].text.strip(), "job_ref_number": cols[2].text.strip(), "created_on": cols[3].text.strip()})
     return pd.DataFrame(data)
 
 def save_and_upload(df):
+    # This function is correct and does not need to change
     if df.empty:
         logging.warning("⚠️ No candidate data found to save.")
         return
