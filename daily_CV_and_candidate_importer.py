@@ -52,29 +52,44 @@ def start_browser():
     return driver
 
 def login(driver):
-    """Performs a standard login, now protected by the Bright Data proxy."""
-    logging.info("🔐 Navigating to login page...")
+    """Performs a human-like login, protected by the Bright Data proxy."""
+    logging.info("🔐 Navigating to login page via proxy...")
     driver.get(LOGIN_URL)
-    wait = WebDriverWait(driver, 30) # Increased wait time for proxy connection
+    
+    # Increase wait time to account for proxy latency
+    wait = WebDriverWait(driver, 45) 
+    
     try:
+        # Wait for the email field to be present to ensure the page is fully interactive
         wait.until(EC.presence_of_element_located((By.ID, "email")))
-        logging.info("Page loaded. Submitting credentials...")
         
-        # We can likely go back to a simpler login method now
-        driver.find_element(By.ID, "email").send_keys(USERNAME)
-        driver.find_element(By.ID, "password").send_keys(PASSWORD)
-        time.sleep(1)
-        driver.find_element(By.XPATH, '//button[contains(text(), "Login")]').click()
+        logging.info("Page loaded. Simulating human interaction to log in...")
         
+        # Find elements
+        email_input = driver.find_element(By.ID, "email")
+        password_input = driver.find_element(By.ID, "password")
+        login_button = driver.find_element(By.XPATH, '//button[contains(text(), "Login")]')
+        
+        # Use ActionChains to mimic human behavior precisely
+        actions = ActionChains(driver)
+        actions.move_to_element(email_input).pause(0.6).click().send_keys(USERNAME).pause(0.4)
+        actions.move_to_element(password_input).pause(0.7).click().send_keys(PASSWORD).pause(0.5)
+        actions.move_to_element(login_button).click()
+        actions.perform()
+
     except Exception as e:
         logging.error(f"❌ An error occurred during the login process: {e}", exc_info=True)
-        driver.save_screenshot("login_error_screenshot.png")
-        logging.info("📸 Screenshot saved as login_error_screenshot.png")
+        # Taking a screenshot is essential for debugging these failures
+        try:
+            driver.save_screenshot("login_error_screenshot.png")
+            logging.info("📸 Screenshot saved as login_error_screenshot.png. Please check the image for clues.")
+        except Exception as ss_e:
+            logging.error(f"Could not save screenshot: {ss_e}")
         raise
         
+    # Wait for the dashboard to confirm a successful login
     wait.until(EC.presence_of_element_located((By.XPATH, '//*[contains(text(), "Jobs Listed")]')))
     logging.info("✅ Logged in successfully!")
-
 
 def fetch_candidates(driver):
     # This function is correct and does not need to change
