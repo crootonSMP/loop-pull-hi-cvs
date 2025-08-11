@@ -2,7 +2,7 @@
 set -e
 
 # Configuration
-BASE_TAG="v3"
+BASE_TAG="v5" # Incremented the version tag
 REGION="europe-west2"
 MEMORY="8Gi"
 CPU="2"
@@ -18,10 +18,9 @@ JOB_NAME="yesterdays-hi-candidates-with-cv-${JOB_TAG}"
 IMAGE_NAME="${REPO}/${JOB_NAME}:${JOB_TAG}"
 
 echo "🛠 Step 1: Preparing workspace..."
-cd ~/ || exit 1
-rm -rf loop-cvs
-git clone https://github.com/crootonSMP/loop-pull-hi-cvs.git loop-cvs || exit 1
-cd loop-cvs || exit 1
+# Using a temp directory is safer
+cd "$(mktemp -d)" || exit 1
+git clone https://github.com/crootonSMP/loop-pull-hi-cvs.git . || exit 1
 
 echo "🐳 Step 2: Building Docker image: ${IMAGE_NAME}"
 docker build --no-cache -t "${IMAGE_NAME}" . || exit 1
@@ -44,10 +43,14 @@ gcloud run jobs deploy "${JOB_NAME}" \
   --set-secrets="DB_PASSWORD=db-password:latest" \
   --set-secrets="DB_NAME=db-name:latest" \
   --set-secrets="HIRE_API_KEY=hire-api-key:latest" \
+  # ✅ Add the new Bright Data secrets
+  --set-secrets="BRIGHTDATA_USERNAME=brightdata-username:latest" \
+  --set-secrets="BRIGHTDATA_PASSWORD=brightdata-password:latest" \
   --set-cloudsql-instances="${DB_CONNECTION_INSTANCE}" \
   --service-account="${SERVICE_ACCOUNT}" \
+  --cpu-boost \
   || exit 1
 
 echo "✅ Job '${JOB_NAME}' deployed successfully."
-echo "👉 To run it:     gcloud run jobs execute ${JOB_NAME} --region=${REGION}"
+echo "👉 To run it:      gcloud run jobs execute ${JOB_NAME} --region=${REGION}"
 echo "🔍 To view logs:  gcloud logging read 'resource.type=cloud_run_job AND resource.labels.job_name=${JOB_NAME}' --limit=50"
