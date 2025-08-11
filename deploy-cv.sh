@@ -2,7 +2,7 @@
 set -e
 
 # Configuration
-BASE_TAG="v5" 
+BASE_TAG="v5"
 REGION="europe-west2"
 MEMORY="8Gi"
 CPU="2"
@@ -18,6 +18,7 @@ JOB_NAME="yesterdays-hi-candidates-with-cv-${JOB_TAG}"
 IMAGE_NAME="${REPO}/${JOB_NAME}:${JOB_TAG}"
 
 echo "🛠 Step 1: Preparing workspace..."
+# Using a temp directory is safer
 cd "$(mktemp -d)" || exit 1
 git clone https://github.com/crootonSMP/loop-pull-hi-cvs.git . || exit 1
 
@@ -25,7 +26,8 @@ echo "🐳 Step 2: Building Docker image: ${IMAGE_NAME}"
 docker build --no-cache -t "${IMAGE_NAME}" . || exit 1
 
 echo "📤 Step 3: Pushing Docker image: ${IMAGE_NAME}"
-docker push "${IMAGE_NAME}" . || exit 1
+# ✅ FIX: Removed the extra '.' from the end of the command
+docker push "${IMAGE_NAME}" || exit 1
 
 echo "🚀 Step 4: Deploying Cloud Run Job: ${JOB_NAME}"
 gcloud run jobs deploy "${JOB_NAME}" \
