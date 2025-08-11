@@ -18,7 +18,6 @@ JOB_NAME="yesterdays-hi-candidates-with-cv-${JOB_TAG}"
 IMAGE_NAME="${REPO}/${JOB_NAME}:${JOB_TAG}"
 
 echo "🛠 Step 1: Preparing workspace..."
-# Using a temp directory is safer
 cd "$(mktemp -d)" || exit 1
 git clone https://github.com/crootonSMP/loop-pull-hi-cvs.git . || exit 1
 
@@ -26,7 +25,6 @@ echo "🐳 Step 2: Building Docker image: ${IMAGE_NAME}"
 docker build --no-cache -t "${IMAGE_NAME}" . || exit 1
 
 echo "📤 Step 3: Pushing Docker image: ${IMAGE_NAME}"
-# ✅ FIX: Removed the extra '.' from the end of the command
 docker push "${IMAGE_NAME}" || exit 1
 
 echo "🚀 Step 4: Deploying Cloud Run Job: ${JOB_NAME}"
@@ -48,7 +46,6 @@ gcloud run jobs deploy "${JOB_NAME}" \
   --set-secrets="BRIGHTDATA_PASSWORD=brightdata-password:latest" \
   --set-cloudsql-instances="${DB_CONNECTION_INSTANCE}" \
   --service-account="${SERVICE_ACCOUNT}" \
-  --cpu-boost \
   || exit 1
 
 echo "✅ Job '${JOB_NAME}' deployed successfully."
