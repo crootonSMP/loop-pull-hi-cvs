@@ -135,6 +135,16 @@ def main():
         if driver:
             logging.info("Closing browser session")
             driver.quit()
+        # Upload entrypoint log
+        try:
+            from google.cloud import storage
+            client = storage.Client()
+            bucket = client.bucket(os.getenv("CV_BUCKET_NAME", "intelligent-recruitment-cvs"))
+            blob = bucket.blob("logs/entrypoint.log")
+            blob.upload_from_filename("/tmp/entrypoint.log")
+            logging.info("Uploaded entrypoint.log to GCS")
+        except Exception as e:
+            logging.error(f"Failed to upload entrypoint.log: {e}")
         logging.info("Script finished")
 
 if __name__ == "__main__":
