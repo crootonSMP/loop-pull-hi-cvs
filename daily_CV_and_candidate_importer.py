@@ -30,23 +30,24 @@ BRIGHTDATA_HOST = "brd.superproxy.io"
 BRIGHTDATA_PORT = 22225
 
 def start_browser():
-    """Starts a browser connected through the Bright Data Scraping Browser proxy."""
     logging.info("🚀 Launching Chrome browser via Bright Data Scraping Browser...")
+    driver_path = "/usr/local/bin/chromedriver"
+    logging.info(f"ChromeDriver path: {driver_path}")
+    if not os.path.exists(driver_path):
+        logging.error("ChromeDriver binary not found!")
+        raise FileNotFoundError(f"ChromeDriver not found at {driver_path}")
     
     options = webdriver.ChromeOptions()
-    
-    # ✅ Configure the proxy connection for Bright Data
     proxy_url = f"http://{BRIGHTDATA_USERNAME}:{BRIGHTDATA_PASSWORD}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
+    logging.info(f"Proxy URL: {proxy_url}")
     options.add_argument(f'--proxy-server={proxy_url}')
-    
-    # Standard options
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument('--window-size=1280,720')
     
-    driver_path = "/usr/local/bin/chromedriver"
+    logging.info("Starting ChromeDriver service...")
     service = Service(executable_path=driver_path)
-
+    logging.info("Initializing WebDriver...")
     driver = webdriver.Chrome(service=service, options=options)
     logging.info("✅ Browser started successfully and connected via proxy!")
     return driver
