@@ -39,15 +39,14 @@ def start_browser():
     
     # Check Chrome version
     try:
-        chrome_version = subprocess.check_output(["google-chrome", "--version"]).decode()
+        chrome_version = subprocess.check_output(["/opt/chrome/chrome", "--version"]).decode()
         logging.info(f"Chrome version: {chrome_version}")
     except Exception as e:
         logging.error(f"Failed to get Chrome version: {e}")
     
     options = webdriver.ChromeOptions()
-    proxy_url = f"http://{BRIGHTDATA_USERNAME}:{BRIGHTDATA_PASSWORD}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
-    logging.info("Applying proxy settings")
-    # Comment out proxy to test without it
+    # proxy_url = f"http://{BRIGHTDATA_USERNAME}:{BRIGHTDATA_PASSWORD}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
+    # logging.info("Applying proxy settings")
     # options.add_argument(f'--proxy-server={proxy_url}')
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
