@@ -27,7 +27,7 @@ BUCKET_NAME = os.getenv("CV_BUCKET_NAME", "intelligent-recruitment-cvs")
 BRIGHTDATA_USERNAME = os.getenv("BRIGHTDATA_USERNAME")
 BRIGHTDATA_PASSWORD = os.getenv("BRIGHTDATA_PASSWORD")
 BRIGHTDATA_HOST = "brd.superproxy.io"
-BRIGHTDATA_PORT = 22225
+BRIGHTDATA_PORT = 22225  # Adjust to 22226 if Bright Data dashboard specifies a different port
 
 def start_browser():
     logging.info("Entering start_browser")
@@ -45,9 +45,9 @@ def start_browser():
         logging.error(f"Failed to get Chrome version: {e}")
     
     options = webdriver.ChromeOptions()
-    # proxy_url = f"http://{BRIGHTDATA_USERNAME}:{BRIGHTDATA_PASSWORD}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
-    # logging.info("Applying proxy settings")
-    # options.add_argument(f'--proxy-server={proxy_url}')
+    proxy_url = f"http://{BRIGHTDATA_USERNAME}:{BRIGHTDATA_PASSWORD}@{BRIGHTDATA_HOST}:{BRIGHTDATA_PORT}"
+    logging.info("Applying proxy settings")
+    options.add_argument(f'--proxy-server={proxy_url}')
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument('--window-size=1280,720')
