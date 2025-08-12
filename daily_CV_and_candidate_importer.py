@@ -27,7 +27,7 @@ BUCKET_NAME = os.getenv("CV_BUCKET_NAME", "intelligent-recruitment-cvs")
 BRIGHTDATA_USERNAME = os.getenv("BRIGHTDATA_USERNAME")
 BRIGHTDATA_PASSWORD = os.getenv("BRIGHTDATA_PASSWORD")
 BRIGHTDATA_HOST = "brd.superproxy.io"
-BRIGHTDATA_PORT = 22225  # Adjust to 22226 if Bright Data dashboard specifies a different port
+BRIGHTDATA_PORT = 33335  
 
 def start_browser():
     logging.info("Entering start_browser")
