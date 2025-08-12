@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgbm1 \
     libxss1 \
     libglib2.0-0 \
+    libxkbcommon0 \  # Added to fix Chrome dependency
     xvfb \
     xauth \
     tini \
