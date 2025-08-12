@@ -33,8 +33,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /tmp && chown -R appuser:appuser /tmp /opt/chrome /usr/local/bin/chromedriver
-
 # Install Chrome for Testing
 RUN CHROME_VERSION="128.0.6613.119" && \
     wget -q https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chrome-linux64.zip && \
@@ -51,12 +49,14 @@ RUN CHROME_VERSION="128.0.6613.119" && \
     chmod +x /usr/local/bin/chromedriver && \
     rm -rf chromedriver-linux64.zip chromedriver-linux64
 
-# Add Chrome to PATH
-ENV PATH="/opt/chrome:${PATH}"
-
 # Create non-root user
 RUN useradd --create-home appuser
-RUN chown -R appuser:appuser /opt/chrome /usr/local/bin/chromedriver
+
+# Set permissions for appuser
+RUN mkdir -p /tmp && chown -R appuser:appuser /tmp /opt/chrome /usr/local/bin/chromedriver
+
+# Add Chrome to PATH
+ENV PATH="/opt/chrome:${PATH}"
 
 # Switch to non-root user
 USER appuser
