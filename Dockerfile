@@ -33,6 +33,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+RUN mkdir -p /tmp && chown -R appuser:appuser /tmp /opt/chrome /usr/local/bin/chromedriver
+
 # Install Chrome for Testing
 RUN CHROME_VERSION="128.0.6613.119" && \
     wget -q https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chrome-linux64.zip && \
