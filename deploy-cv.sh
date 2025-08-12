@@ -1,53 +1,29 @@
 #!/bin/bash
 set -e
-
-# Configuration
-BASE_TAG="v5"
-REGION="europe-west2"
-MEMORY="8Gi"
-CPU="2"
-TASK_TIMEOUT="1800s"
-DB_CONNECTION_INSTANCE="intelligent-recruitment-engine:europe-west2:recruitment-db-main"
-SERVICE_ACCOUNT="ingestion-job-sa@intelligent-recruitment-engine.iam.gserviceaccount.com"
-REPO="europe-west2-docker.pkg.dev/intelligent-recruitment-engine/recruitment-engine-repo"
-
-# Generate timestamp-based tag and job name
-TIMESTAMP=$(date +"%Y%m%d-%H%M")
-JOB_TAG="${BASE_TAG}-${TIMESTAMP}"
-JOB_NAME="yesterdays-hi-candidates-with-cv-${JOB_TAG}"
-IMAGE_NAME="${REPO}/${JOB_NAME}:${JOB_TAG}"
-
-echo "🛠 Step 1: Preparing workspace..."
-cd "$(mktemp -d)" || exit 1
-git clone https://github.com/crootonSMP/loop-pull-hi-cvs.git . || exit 1
-
-echo "🐳 Step 2: Building Docker image: ${IMAGE_NAME}"
-docker build --no-cache -t "${IMAGE_NAME}" . || exit 1
-
-echo "📤 Step 3: Pushing Docker image: ${IMAGE_NAME}"
-docker push "${IMAGE_NAME}" || exit 1
-
-echo "🚀 Step 4: Deploying Cloud Run Job: ${JOB_NAME}"
-gcloud run jobs deploy "${JOB_NAME}" \
-  --region="${REGION}" \
-  --image="${IMAGE_NAME}" \
-  --memory="${MEMORY}" \
-  --cpu="${CPU}" \
-  --task-timeout="${TASK_TIMEOUT}" \
-  --set-env-vars="DB_CONNECTION_NAME=${DB_CONNECTION_INSTANCE}" \
-  --set-env-vars="HIRE_USERNAME=crootonmaster@applygateway.com" \
-  --set-env-vars="CV_BUCKET_NAME=intelligent-recruitment-cvs" \
-  --set-secrets="HIRE_PASSWORD=hire-password:latest" \
-  --set-secrets="DB_USER=db-user:latest" \
-  --set-secrets="DB_PASSWORD=db-password:latest" \
-  --set-secrets="DB_NAME=db-name:latest" \
-  --set-secrets="HIRE_API_KEY=hire-api-key:latest" \
-  --set-secrets="BRIGHTDATA_USERNAME=brightdata-username:latest" \
-  --set-secrets="BRIGHTDATA_PASSWORD=brightdata-password:latest" \
-  --set-cloudsql-instances="${DB_CONNECTION_INSTANCE}" \
-  --service-account="${SERVICE_ACCOUNT}" \
-  || exit 1
-
-echo "✅ Job '${JOB_NAME}' deployed successfully."
-echo "👉 To run it:      gcloud run jobs execute ${JOB_NAME} --region=${REGION}"
-echo "🔍 To view logs:  gcloud logging read 'resource.type=cloud_run_job AND resource.labels.job_name=${JOB_NAME}' --limit=50"
+touch /tmp/entrypoint.log
+chmod 666 /tmp/entrypoint.log
+echo "Starting entrypoint.sh" >> /tmp/entrypoint.log
+echo "HIRE_USERNAME set: ${HIRE_USERNAME:+[SET]}" >> /tmp/entrypoint.log
+echo "HIRE_PASSWORD set: ${HIRE_PASSWORD:+[SET]}" >> /tmp/entrypoint.log
+echo "BRIGHTDATA_USERNAME set: ${BRIGHTDATA_USERNAME:+[SET]}" >> /tmp/entrypoint.log
+echo "BRIGHTDATA_PASSWORD set: ${BRIGHTDATA_PASSWORD:+[SET]}" >> /tmp/entrypoint.log
+echo "Checking Chrome version..." >> /tmp/entrypoint.log
+/opt/chrome/chrome --version >> /tmp/entrypoint.log 2>> /tmp/entrypoint.log || echo "Chrome failed to run" >> /tmp/entrypoint.log
+echo "Checking ChromeDriver version..." >> /tmp/entrypoint.log
+/usr/local/bin/chromedriver --version >> /tmp/entrypoint.log 2>> /tmp/entrypoint.log || echo "ChromeDriver failed to run" >> /tmp/entrypoint.log
+echo "Testing proxy connectivity..." >> /tmp/entrypoint.log
+curl --proxy http://${BRIGHTDATA_USERNAME}:${BRIGHTDATA_PASSWORD}@brd.superproxy.io:22225 https://example.com >> /tmp/entrypoint.log 2>> /tmp/entrypoint.log || echo "Proxy test failed" >> /tmp/entrypoint.log
+echo "Creating X11 directory..." >> /tmp/entrypoint.log
+mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
+echo "Starting Xvfb..." >> /tmp/entrypoint.log
+Xvfb :99 -screen 0 1280x720x16 -ac >> /tmp/entrypoint.log 2>> /tmp/entrypoint.log &
+sleep 2
+export DISPLAY=:99
+echo "DISPLAY set to $DISPLAY" >> /tmp/entrypoint.log
+if ! ps aux | grep -v grep | grep Xvfb > /dev/null; then
+    echo "Xvfb failed to start" >> /tmp/entrypoint.log
+    exit 1
+fi
+echo "Xvfb running" >> /tmp/entrypoint.log
+echo "Running Python script..." >> /tmp/entrypoint.log
+exec python daily_CV_and_candidate_importer.py
