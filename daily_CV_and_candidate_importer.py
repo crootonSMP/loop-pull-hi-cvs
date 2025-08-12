@@ -130,12 +130,11 @@ def main():
         df = fetch_candidates(driver)
         save_and_upload(df)
     except Exception as e:
-        logging.critical("Critical error in main: {e}", exc_info=True)
+        logging.critical(f"Critical error in main: {e}", exc_info=True)
     finally:
         if driver:
             logging.info("Closing browser session")
             driver.quit()
-        # Upload entrypoint log
         try:
             from google.cloud import storage
             client = storage.Client()
